@@ -15,6 +15,34 @@
   --font-base:14px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
+/* ── Themes ── */
+[data-theme="light"] {
+  --navy:#f0f4f8; --navy2:#e2e8f0; --card:#ffffff; --card2:#f8fafc;
+  --text:#1e293b; --muted:#64748b; --border:rgba(0,0,0,0.1);
+}
+[data-theme="blue"] {
+  --navy:#0d1b2a; --navy2:#112236; --card:#152840; --card2:#1a3050;
+  --text:#e2f0ff; --muted:#7aa8cc; --border:rgba(100,180,255,0.1);
+}
+[data-theme="purple"] {
+  --navy:#0f0a1e; --navy2:#180f2e; --card:#1e1040; --card2:#261550;
+  --text:#e8e0ff; --muted:#9b80cc; --border:rgba(168,85,247,0.12);
+}
+[data-theme="green"] {
+  --navy:#071512; --navy2:#0d1f1b; --card:#0f2820; --card2:#143025;
+  --text:#e0f5ee; --muted:#6aaa8a; --border:rgba(34,197,94,0.1);
+}
+
+/* ── Theme Picker ── */
+.theme-picker { display:flex; gap:8px; align-items:center; }
+.theme-dot { width:22px; height:22px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:.2s; }
+.theme-dot:hover, .theme-dot.active { border-color:#fff; transform:scale(1.15); }
+.theme-dot.t-dark   { background:linear-gradient(135deg,#0a0f1e,#151d2e); }
+.theme-dot.t-light  { background:linear-gradient(135deg,#f0f4f8,#ffffff); border-color:#ccc; }
+.theme-dot.t-blue   { background:linear-gradient(135deg,#0d1b2a,#152840); }
+.theme-dot.t-purple { background:linear-gradient(135deg,#0f0a1e,#1e1040); }
+.theme-dot.t-green  { background:linear-gradient(135deg,#071512,#0f2820); }
+
 body{background:var(--navy);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;font-size:var(--font-base);}
 
 /* HEADER */
@@ -714,6 +742,13 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
     <div class="lang-toggle">
       <button class="lang-btn active" onclick="setLang('es')">ES</button>
       <button class="lang-btn" onclick="setLang('en')">EN</button>
+      <div class="theme-picker" style="margin-left:8px">
+        <div class="theme-dot t-dark active"   title="Oscuro"   onclick="setTheme('dark')"   id="tdark"></div>
+        <div class="theme-dot t-light"          title="Claro"    onclick="setTheme('light')"  id="tlight"></div>
+        <div class="theme-dot t-blue"           title="Azul"     onclick="setTheme('blue')"   id="tblue"></div>
+        <div class="theme-dot t-purple"         title="Morado"   onclick="setTheme('purple')" id="tpurple"></div>
+        <div class="theme-dot t-green"          title="Verde"    onclick="setTheme('green')"  id="tgreen"></div>
+      </div>
     </div>
     <div class="notif-btn" onclick="openReminders()">🔔<div class="notif-badge" id="notifBadge">0</div></div>
   </div>
@@ -1219,6 +1254,14 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
     <a class="pop-btn pb-call" id="popupCallLink">📞 <span id="lbl-call">Llamar</span></a>
     <a class="pop-btn pb-sms" id="popupSmsLink">💬 SMS</a>
   </div>
+  <div class="popup-main-btns" style="margin-top:8px">
+    <a class="pop-btn" id="popupWaLink" style="background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;border:none">💬 WhatsApp</a>
+    <a class="pop-btn" id="popupEmailLink" style="background:linear-gradient(135deg,#4a85f5,#2d6cdf);color:#fff;border:none">✉️ Email</a>
+  </div>
+  <div class="popup-main-btns" style="margin-top:8px">
+    <a class="pop-btn" id="popupMeetLink" target="_blank" style="background:linear-gradient(135deg,#00897b,#00695c);color:#fff;border:none">📹 Meet</a>
+    <a class="pop-btn" id="popupZoomLink" target="_blank" style="background:linear-gradient(135deg,#2d8cff,#0e72ed);color:#fff;border:none">🎥 Zoom</a>
+  </div>
   <div class="popup-divider"></div>
   <div class="tpl-label" id="lbl-tpl">Plantillas SMS:</div>
   <div class="sms-tpls" id="smsTemplates"></div>
@@ -1568,9 +1611,31 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 // ════════════════════════════════════════
 //  LANGUAGE
 // ════════════════════════════════════════
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t === 'dark' ? '' : t);
+  document.querySelectorAll('.theme-dot').forEach(function(d){ d.classList.remove('active'); });
+  var el = document.getElementById('t' + t);
+  if (el) el.classList.add('active');
+  localStorage.setItem('dlcr_theme', t);
+}
+// Load saved theme
+(function() {
+  var saved = localStorage.getItem('dlcr_theme');
+  if (saved && saved !== 'dark') setTheme(saved);
+})();
+
 function setLang(l){
   lang=l;
   document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.textContent===l.toUpperCase()));
+  // Notify Jarvis of language change
+  jvInited = false; // reset so greeting updates
+  var bbl = document.getElementById('jvWelcomeBbl');
+  if (bbl) {
+    var greeting = l === 'es' ? 'Hola Jefe' : 'Hello Boss';
+    var helpText = l === 'es' ? '¿En qué te puedo ayudar hoy?' : 'How can I help you today?';
+    bbl.innerHTML = greeting + '! 👊 Soy <strong>Jarvis 2.0</strong> 🤖<br><br>' + helpText;
+  }
+  jvBuildCmds();
   const map={
     'lbl-clients':l==='es'?'Clientes':'Clients','lbl-commission':l==='es'?'Comisión':'Commission',
     'lbl-income':l==='es'?'Ingresos':'Income','lbl-table':l==='es'?'Tabla':'Table',
@@ -2304,6 +2369,13 @@ function showPopup(event,id){
   document.getElementById('popupPhone').textContent=c.phone;
   document.getElementById('popupCallLink').href=`tel:${digits}`;
   document.getElementById('popupSmsLink').href=`sms:${digits}`;
+  document.getElementById('popupWaLink').href=`https://wa.me/${digits}`;
+  var emailEl = document.getElementById('popupEmailLink');
+  if (emailEl) emailEl.href = c.email ? `mailto:${c.email}` : '#';
+  if (emailEl) emailEl.style.opacity = c.email ? '1' : '0.4';
+  var meetName = encodeURIComponent((c.name||'cliente').replace(/\s+/g,'-').toLowerCase());
+  document.getElementById('popupMeetLink').href = `https://meet.google.com/new`;
+  document.getElementById('popupZoomLink').href = `https://zoom.us/start/videomeeting`;
   document.getElementById('smsTemplates').innerHTML=T[lang].tpls.map(tpl=>{
     const msg=tpl.replace('{n}',c.name);
     return `<a class="sms-tpl" href="sms:${digits}${sep}body=${encodeURIComponent(msg)}">${msg.length>62?msg.substring(0,62)+'…':msg}</a>`;
@@ -4413,6 +4485,7 @@ function jvSystemPrompt() {
 
   return [
     'Eres Jarvis, el asistente de IA del CRM DLCR Real Estate & Loans.',
+    'IDIOMA ACTUAL DE LA INTERFAZ: ' + (typeof lang !== "undefined" ? (lang === "es" ? "ESPAÑOL" : "ENGLISH") : "ESPAÑOL") + '. Responde siempre en ese mismo idioma.',
     'Hoy es: ' + today + '. Fecha ISO hoy: ' + todayISO + '. Próximo sábado ISO: ' + satISO,
     '',
     'ESTADO ACTUAL DEL CRM:',
