@@ -16,7 +16,16 @@ CORS(app)
 DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
 MEMORY_DIR = os.path.join(os.path.dirname(__file__), "memory")
 # Look for index.html in dashboard/ or root
-DASH_DIR = os.path.dirname(os.path.abspath(__file__))
+@app.route("/")
+def index():
+    import glob, os
+    # Try multiple locations
+    for path in ["index.html", "dashboard/index.html"]:
+        full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+        if os.path.exists(full):
+            folder, fname = os.path.split(full)
+            return send_from_directory(folder, fname)
+    return "CRM Loading...", 404
 
 
 os.makedirs(DATA_DIR,   exist_ok=True)
