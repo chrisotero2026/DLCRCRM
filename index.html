@@ -377,6 +377,43 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 /* ═══════════════════════════════════════
    JARVIS 2.0 — Chat AI Tab
 ═══════════════════════════════════════ */
+/* ── Calendar ── */
+#view-calendar { display:none; flex-direction:column; padding:20px; gap:16px; }
+#view-calendar.active { display:flex; }
+.cal-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.cal-nav { display:flex; align-items:center; gap:10px; }
+.cal-nav button { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--text); padding:6px 14px; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
+.cal-nav button:hover { background:rgba(255,255,255,.1); }
+.cal-title { font-size:20px; font-weight:800; min-width:200px; text-align:center; }
+.cal-views { display:flex; gap:6px; }
+.cal-view-btn { padding:6px 14px; border-radius:8px; border:1px solid rgba(255,255,255,.1); background:transparent; color:var(--muted); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; }
+.cal-view-btn.active { background:linear-gradient(135deg,var(--gold),#d4920a); color:#000; border-color:transparent; }
+.cal-grid-month { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal-dow { text-align:center; font-size:11px; font-weight:800; color:var(--muted); padding:8px 0; text-transform:uppercase; letter-spacing:.5px; }
+.cal-day { min-height:90px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.05); border-radius:8px; padding:6px; cursor:pointer; transition:.15s; }
+.cal-day:hover { background:rgba(255,255,255,.05); }
+.cal-day.today { border-color:var(--gold); background:rgba(240,165,0,.06); }
+.cal-day.other-month { opacity:.35; }
+.cal-day.selected { border-color:var(--blue2); background:rgba(59,130,246,.08); }
+.cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; }
+.cal-day.today .cal-day-num { background:var(--gold); color:#000; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; }
+.cal-event { font-size:10px; font-weight:700; padding:2px 5px; border-radius:4px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.cal-week-grid { display:grid; grid-template-columns:60px repeat(7,1fr); gap:1px; }
+.cal-time-label { font-size:10px; color:var(--muted); text-align:right; padding-right:8px; padding-top:2px; }
+.cal-week-col { border-left:1px solid rgba(255,255,255,.05); min-height:40px; position:relative; }
+.cal-week-header { font-size:11px; font-weight:800; text-align:center; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,.08); }
+.cal-week-header.today-col { color:var(--gold); }
+.cal-day-view { display:flex; flex-direction:column; gap:8px; }
+.cal-day-slot { display:grid; grid-template-columns:60px 1fr; gap:8px; min-height:44px; border-bottom:1px solid rgba(255,255,255,.04); }
+.cal-day-slot-time { font-size:11px; color:var(--muted); padding-top:4px; text-align:right; }
+.cal-day-slot-events { padding:2px 0; }
+.cal-event-card { background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.3); border-left:3px solid var(--blue2); border-radius:6px; padding:6px 10px; margin-bottom:4px; cursor:pointer; }
+.cal-event-card:hover { background:rgba(59,130,246,.25); }
+.cal-legend { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.cal-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
+.cal-legend-dot { width:10px; height:10px; border-radius:50%; }
+.cal-add-btn { background:linear-gradient(135deg,var(--gold),#d4920a); border:none; color:#000; padding:8px 18px; border-radius:9px; font-weight:800; font-size:13px; cursor:pointer; font-family:inherit; }
+
 #view-jarvis {
   display: none;
   flex-direction: column;
@@ -690,6 +727,7 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
   <div class="tab" id="tab-income" onclick="switchTab('income')">📈 <span id="lbl-income">Ingresos</span></div>
   <div class="tab" id="tab-table" onclick="switchTab('table')">📋 <span id="lbl-table">Tabla</span></div>
   <div class="tab" id="tab-mort" onclick="switchTab('mort')">🧮 Calculadora de Préstamo</div>
+  <div class="tab" id="tab-calendar" onclick="switchTab('calendar')">📅 Calendario</div>
   <div class="tab" id="tab-jarvis" onclick="switchTab('jarvis')">🤖 Jarvis AI</div>
 </div>
 
@@ -1066,6 +1104,27 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 
 
     <!-- ═══ VIEW: JARVIS AI ═══ -->
+    <div class="view" id="view-calendar">
+      <div class="cal-header">
+        <div class="cal-nav">
+          <button onclick="calPrev()">‹</button>
+          <div class="cal-title" id="calTitle">—</div>
+          <button onclick="calNext()">›</button>
+          <button onclick="calGoToday()" style="font-size:12px;padding:5px 10px">Hoy</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="cal-views">
+            <button class="cal-view-btn active" id="calBtnMonth" onclick="calSetView('month')">Mes</button>
+            <button class="cal-view-btn" id="calBtnWeek" onclick="calSetView('week')">Semana</button>
+            <button class="cal-view-btn" id="calBtnDay" onclick="calSetView('day')">Día</button>
+          </div>
+          <button class="cal-add-btn" onclick="calAddEvent()">+ Nueva Cita</button>
+        </div>
+      </div>
+      <div class="cal-legend" id="calLegend"></div>
+      <div id="calBody" style="flex:1"></div>
+    </div>
+
     <div class="view" id="view-jarvis">
       <div class="jv-wrap">
 
@@ -1555,6 +1614,7 @@ function switchTab(tab){
   if(tab==='table')      renderTable();
   if(tab==='mort')       { populateMortClients(); calcMort(); }
   if(tab==='jarvis')     { jvInit(); }
+  if(tab==='calendar')   { calRender(); }
 }
 
 function renderAll(){
@@ -2683,9 +2743,9 @@ var ROLE_LABELS = {
 
 // Default tab permissions per role (owner always sees everything)
 var DEFAULT_PERMS = {
-  manager:    { clients:true, addClient:true,  editClient:true,  delete:false, pipeline:true,  movePipeline:true,  income:true,  addIncome:true,  table:true,  mortgage:true, team:true,  forecast:true,  export:false, merge:true, jarvis:true  },
-  supervisor: { clients:true, addClient:true,  editClient:true,  delete:false, pipeline:true,  movePipeline:true,  income:false, addIncome:false, table:true,  mortgage:true, team:true,  forecast:false, export:false, merge:false, jarvis:true },
-  agent:      { clients:true, addClient:false, editClient:false, delete:false, pipeline:false, movePipeline:false, income:false, addIncome:false, table:false, mortgage:true, team:false, forecast:false, export:false, merge:false, jarvis:true }
+  manager:    { clients:true, addClient:true,  editClient:true,  delete:false, pipeline:true,  movePipeline:true,  income:true,  addIncome:true,  table:true,  mortgage:true, team:true,  forecast:true,  export:false, merge:true,  jarvis:true, calendar:true  },
+  supervisor: { clients:true, addClient:true,  editClient:true,  delete:false, pipeline:true,  movePipeline:true,  income:false, addIncome:false, table:true,  mortgage:true, team:true,  forecast:false, export:false, merge:false, jarvis:true, calendar:true },
+  agent:      { clients:true, addClient:false, editClient:false, delete:false, pipeline:false, movePipeline:false, income:false, addIncome:false, table:false, mortgage:true, team:false, forecast:false, export:false, merge:false, jarvis:true, calendar:true }
 };
 
 // Current user profile loaded from Firestore
@@ -2702,6 +2762,12 @@ async function loadUserProfile(uid) {
     if (snap.exists()) {
       _userProfile = snap.data();
       _userProfile.uid = uid;
+      // Patch income permission for existing agents who may have income:false
+      if (_userProfile.role !== 'owner' && _userProfile.perms && _userProfile.perms.income === false) {
+        _userProfile.perms.income    = true;
+        _userProfile.perms.addIncome = true;
+        try { await fb.setDoc(fb.doc(_fbDb,'users',uid), {perms: _userProfile.perms}, {merge:true}); } catch(e){}
+      }
       // Update last login time
       try { await fb.setDoc(fb.doc(_fbDb,'users',uid), {lastLogin: Date.now()}, {merge:true}); } catch(e){}
     } else {
@@ -2713,8 +2779,8 @@ async function loadUserProfile(uid) {
       } catch(e) { isFirstUser = false; }
       var newRole  = isFirstUser ? 'owner' : 'agent';
       var newPerms = isFirstUser
-        ? { clients:true, pipeline:true, income:true, table:true, mortgage:true, team:true, forecast:true, jarvis:true }
-        : { clients:true, addClient:true, editClient:true, delete:false, pipeline:true, movePipeline:true, income:true, addIncome:true, table:true, mortgage:true, team:false, forecast:false, export:false, merge:false, jarvis:true };
+        ? { clients:true, pipeline:true, income:true, table:true, mortgage:true, team:true, forecast:true, jarvis:true, calendar:true }
+        : { clients:true, addClient:true, editClient:true, delete:false, pipeline:true, movePipeline:true, income:true, addIncome:true, table:true, mortgage:true, team:false, forecast:false, export:false, merge:false, jarvis:true, calendar:true };
       _userProfile = {
         uid:             uid,
         name:            _fbUser.displayName || _fbUser.email,
@@ -2729,7 +2795,7 @@ async function loadUserProfile(uid) {
     }
   } catch(ex) {
     console.warn('loadUserProfile error:', ex);
-    _userProfile = { uid, role:'agent', perms:{ clients:true, pipeline:false, income:false, table:false, mortgage:true, team:false, forecast:false, jarvis:true }, approved:false };
+    _userProfile = { uid, role:'agent', perms:{ clients:true, addClient:true, editClient:true, delete:false, pipeline:true, movePipeline:true, income:true, addIncome:true, table:true, mortgage:true, team:false, forecast:false, export:false, merge:false, jarvis:true }, approved:true };
   }
 }
 
@@ -2748,6 +2814,7 @@ function applyTabPermissions() {
     'tab-team':     'team',
     'tab-forecast': 'forecast',
     'tab-jarvis':   'jarvis',
+    'tab-calendar': 'calendar',
   };
   Object.keys(tabMap).forEach(function(tabId) {
     var el = document.getElementById(tabId);
@@ -3629,6 +3696,370 @@ var JV_CMDS = [
   { ico:'🌤️', es:'¿Clima hoy?',         en:'Weather today',        q:'¿Cómo está el clima hoy en Arlington Virginia?' },
 ];
 
+
+// ══════════════════════════════════════════════════════════════
+//  CALENDAR ENGINE — Google Calendar style
+// ══════════════════════════════════════════════════════════════
+
+var _calView   = 'month';  // month | week | day
+var _calDate   = new Date();
+var _calEvents = [];  // combined: CRM nextCalls + manual events
+
+var CAL_COLORS = [
+  '#3b82f6','#f0a500','#22c55e','#a855f7','#ef4444',
+  '#06b6d4','#f97316','#ec4899','#14b8a6','#84cc16'
+];
+
+// ── Load all events ──
+function calLoadEvents() {
+  _calEvents = [];
+  var colorMap = {};
+  var colorIdx = 0;
+
+  // 1. CRM clients nextCall dates
+  if (typeof clients !== 'undefined') {
+    clients.forEach(function(c) {
+      if (!c.nextCall || c.stage === 'closed') return;
+      var uid = c.createdBy || 'owner';
+      if (!colorMap[uid]) { colorMap[uid] = CAL_COLORS[colorIdx++ % CAL_COLORS.length]; }
+      _calEvents.push({
+        id:      'crm_' + c.id,
+        title:   '📞 ' + c.name,
+        date:    c.nextCall,
+        time:    c.nextCallTime || '',
+        color:   colorMap[uid],
+        type:    'call',
+        agent:   c.createdByName || 'Owner',
+        agentId: uid,
+        clientId: c.id,
+        phone:   c.phone || '',
+        notes:   c.notes || ''
+      });
+    });
+  }
+
+  // 2. Manual events from server calendar
+  fetch('/api/calendar/events')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      (d.events || []).forEach(function(e) {
+        if (!e.date) return;
+        _calEvents.push({
+          id:    'srv_' + e.id,
+          title: e.title || e.notes || 'Cita',
+          date:  e.date,
+          time:  e.time || '',
+          color: '#22c55e',
+          type:  'manual',
+          agent: e.agent || 'Owner',
+          notes: e.notes || ''
+        });
+      });
+      calRenderBody();
+    })
+    .catch(function(){ calRenderBody(); });
+}
+
+// ── Navigate ──
+function calPrev() {
+  if (_calView === 'month') {
+    _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth() - 1, 1);
+  } else if (_calView === 'week') {
+    _calDate = new Date(_calDate.getTime() - 7 * 86400000);
+  } else {
+    _calDate = new Date(_calDate.getTime() - 86400000);
+  }
+  calRender();
+}
+function calNext() {
+  if (_calView === 'month') {
+    _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth() + 1, 1);
+  } else if (_calView === 'week') {
+    _calDate = new Date(_calDate.getTime() + 7 * 86400000);
+  } else {
+    _calDate = new Date(_calDate.getTime() + 86400000);
+  }
+  calRender();
+}
+function calGoToday() { _calDate = new Date(); calRender(); }
+function calSetView(v) {
+  _calView = v;
+  document.querySelectorAll('.cal-view-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('calBtn' + v.charAt(0).toUpperCase() + v.slice(1)).classList.add('active');
+  calRender();
+}
+
+// ── Main render ──
+function calRender() {
+  calLoadEvents();
+  // Title
+  var title = '';
+  var months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  if (_calView === 'month') {
+    title = months[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
+  } else if (_calView === 'week') {
+    var ws = calWeekStart(_calDate);
+    var we = new Date(ws.getTime() + 6*86400000);
+    title = months[ws.getMonth()]+' '+ws.getDate()+' – '+months[we.getMonth()]+' '+we.getDate()+', '+we.getFullYear();
+  } else {
+    title = days[_calDate.getDay()] + ' ' + _calDate.getDate() + ' de ' + months[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
+  }
+  document.getElementById('calTitle').textContent = title;
+}
+
+function calRenderBody() {
+  var body = document.getElementById('calBody');
+  if (!body) return;
+  if (_calView === 'month') calRenderMonth(body);
+  else if (_calView === 'week') calRenderWeek(body);
+  else calRenderDay(body);
+  calRenderLegend();
+}
+
+function calWeekStart(d) {
+  var s = new Date(d);
+  s.setDate(s.getDate() - s.getDay());
+  return s;
+}
+
+function calDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function calEventsForDate(dateStr) {
+  return _calEvents.filter(function(e){ return e.date === dateStr; })
+    .sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+}
+
+// ── Month view ──
+function calRenderMonth(body) {
+  var today = calDateStr(new Date());
+  var year  = _calDate.getFullYear();
+  var month = _calDate.getMonth();
+  var first = new Date(year, month, 1);
+  var last  = new Date(year, month+1, 0);
+  var days  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  var html = '<div class="cal-grid-month">';
+  days.forEach(function(d){ html += '<div class="cal-dow">'+d+'</div>'; });
+
+  // Pad start
+  var startDay = first.getDay();
+  for (var i = 0; i < startDay; i++) {
+    var pd = new Date(year, month, -startDay+i+1);
+    html += '<div class="cal-day other-month"><div class="cal-day-num">'+pd.getDate()+'</div></div>';
+  }
+
+  // Days of month
+  for (var d2 = 1; d2 <= last.getDate(); d2++) {
+    var ds = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d2).padStart(2,'0');
+    var evs = calEventsForDate(ds);
+    var cls = 'cal-day' + (ds===today?' today':'');
+    html += '<div class="'+cls+'" onclick="calDayClick(''+ds+'')">';
+    html += '<div class="cal-day-num">'+d2+'</div>';
+    evs.slice(0,3).forEach(function(e){
+      html += '<div class="cal-event" style="background:'+e.color+'22;color:'+e.color+';border-left:2px solid '+e.color+'" onclick="event.stopPropagation();calShowEvent(''+e.id+'')">'+
+        (e.time?e.time.substring(0,5)+' ':'')+e.title+'</div>';
+    });
+    if (evs.length > 3) html += '<div style="font-size:9px;color:var(--muted);padding:1px 3px">+' + (evs.length-3) + ' más</div>';
+    html += '</div>';
+  }
+
+  // Pad end
+  var endDay = last.getDay();
+  for (var j = endDay+1; j <= 6; j++) {
+    html += '<div class="cal-day other-month"><div class="cal-day-num">'+(j-endDay)+'</div></div>';
+  }
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+// ── Week view ──
+function calRenderWeek(body) {
+  var today  = calDateStr(new Date());
+  var ws     = calWeekStart(_calDate);
+  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var hours  = [];
+  for (var h = 7; h <= 20; h++) hours.push(h);
+
+  var html = '<div class="cal-week-grid" style="border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden">';
+  html += '<div style="background:rgba(255,255,255,.02)"></div>';
+
+  for (var di = 0; di < 7; di++) {
+    var dd = new Date(ws.getTime() + di*86400000);
+    var ds = calDateStr(dd);
+    var isToday = ds === today;
+    html += '<div class="cal-week-header'+(isToday?' today-col':'')+'">'+days[di]+'<br><span style="font-size:16px;font-weight:800'+(isToday?';color:var(--gold)':'')+'">'+dd.getDate()+'</span></div>';
+  }
+
+  hours.forEach(function(h) {
+    html += '<div class="cal-time-label">'+String(h).padStart(2,'0')+':00</div>';
+    for (var di2 = 0; di2 < 7; di2++) {
+      var dd2 = new Date(ws.getTime() + di2*86400000);
+      var ds2 = calDateStr(dd2);
+      var slotEvs = calEventsForDate(ds2).filter(function(e){
+        if (!e.time) return h === 9;
+        return parseInt(e.time.split(':')[0]) === h;
+      });
+      html += '<div class="cal-week-col" onclick="calDayClick(''+ds2+'')" style="padding:2px">';
+      slotEvs.forEach(function(e){
+        html += '<div class="cal-event" style="background:'+e.color+'22;color:'+e.color+';border-left:2px solid '+e.color+';padding:3px 5px;border-radius:4px;margin-bottom:2px;font-size:10px" onclick="event.stopPropagation();calShowEvent(''+e.id+'')">'+e.title+'</div>';
+      });
+      html += '</div>';
+    }
+  });
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+// ── Day view ──
+function calRenderDay(body) {
+  var ds   = calDateStr(_calDate);
+  var evs  = calEventsForDate(ds);
+  var hours = [];
+  for (var h = 7; h <= 21; h++) hours.push(h);
+
+  var html = '<div class="cal-day-view">';
+  hours.forEach(function(h) {
+    var slotEvs = evs.filter(function(e){
+      if (!e.time) return h === 9;
+      return parseInt(e.time.split(':')[0]) === h;
+    });
+    html += '<div class="cal-day-slot">';
+    html += '<div class="cal-day-slot-time">'+String(h).padStart(2,'0')+':00</div>';
+    html += '<div class="cal-day-slot-events">';
+    if (slotEvs.length) {
+      slotEvs.forEach(function(e){
+        html += '<div class="cal-event-card" style="border-left-color:'+e.color+';background:'+e.color+'15" onclick="calShowEvent(''+e.id+'')">';
+        html += '<div style="font-weight:700;font-size:13px">'+e.title+'</div>';
+        if (e.time) html += '<div style="font-size:11px;color:var(--muted)">⏰ '+e.time+'</div>';
+        if (e.agent) html += '<div style="font-size:11px;color:var(--muted)">👤 '+e.agent+'</div>';
+        if (e.notes) html += '<div style="font-size:11px;color:var(--muted);margin-top:3px">📝 '+e.notes+'</div>';
+        html += '</div>';
+      });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+// ── Legend ──
+function calRenderLegend() {
+  var agents = {};
+  _calEvents.forEach(function(e){ if(e.agent) agents[e.agent] = e.color; });
+  var html = '';
+  Object.keys(agents).forEach(function(a){
+    html += '<div class="cal-legend-item"><div class="cal-legend-dot" style="background:'+agents[a]+'"></div>'+a+'</div>';
+  });
+  var leg = document.getElementById('calLegend');
+  if (leg) leg.innerHTML = html;
+}
+
+// ── Day click ──
+function calDayClick(dateStr) {
+  _calView = 'day';
+  _calDate = new Date(dateStr + 'T12:00:00');
+  document.querySelectorAll('.cal-view-btn').forEach(function(b){ b.classList.remove('active'); });
+  var btn = document.getElementById('calBtnDay');
+  if (btn) btn.classList.add('active');
+  calRender();
+}
+
+// ── Show event detail ──
+function calShowEvent(id) {
+  var ev = _calEvents.find(function(e){ return e.id === id; });
+  if (!ev) return;
+  var html = '<div>';
+  html += '<div style="font-size:16px;font-weight:800;margin-bottom:12px">'+ev.title+'</div>';
+  html += '<div style="font-size:13px;color:var(--muted);margin-bottom:6px">📅 '+ev.date+(ev.time?' · ⏰ '+ev.time:'')+'</div>';
+  if (ev.agent) html += '<div style="font-size:13px;margin-bottom:6px">👤 '+ev.agent+'</div>';
+  if (ev.phone) html += '<div style="font-size:13px;margin-bottom:6px">📞 <a href="tel:'+ev.phone+'" style="color:var(--blue2)">'+ev.phone+'</a></div>';
+  if (ev.notes) html += '<div style="font-size:13px;margin-bottom:12px">📝 '+ev.notes+'</div>';
+  if (ev.type === 'call' && ev.phone) {
+    html += '<button onclick="window.open('tel:'+ev.phone+'');closeGenModal()" style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">📞 Llamar</button>';
+  }
+  if (ev.type === 'manual') {
+    html += '<button onclick="calDeleteEvent(''+id+'');closeGenModal()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🗑️ Eliminar</button>';
+  }
+  html += '<button onclick="closeGenModal()" style="margin-left:8px;background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Cerrar</button>';
+  html += '</div>';
+  openGenModal(html);
+}
+
+// ── Add event modal ──
+function calAddEvent() {
+  var todayStr = calDateStr(_calDate);
+  var html = '<div>';
+  html += '<div style="font-size:16px;font-weight:800;margin-bottom:16px">📅 Nueva Cita</div>';
+  html += '<div style="margin-bottom:10px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Título</label>';
+  html += '<input id="calEvTitle" type="text" placeholder="Ej: Reunión con cliente" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  html += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Fecha</label>';
+  html += '<input id="calEvDate" type="date" value="'+todayStr+'" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  html += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hora</label>';
+  html += '<input id="calEvTime" type="time" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div></div>';
+  html += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Notas</label>';
+  html += '<input id="calEvNotes" type="text" placeholder="Opcional..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button onclick="calSaveEvent()" style="flex:1;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar</button>';
+  html += '<button onclick="closeGenModal()" style="padding:10px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>';
+  html += '</div></div>';
+  openGenModal(html);
+}
+
+async function calSaveEvent() {
+  var title = (document.getElementById('calEvTitle').value||'').trim();
+  var date  = document.getElementById('calEvDate').value;
+  var time  = document.getElementById('calEvTime').value;
+  var notes = (document.getElementById('calEvNotes').value||'').trim();
+  if (!title || !date) { showToast('⚠️ Título y fecha son requeridos'); return; }
+  var ev = {
+    title: title, date: date, time: time, notes: notes,
+    agent: (_fbUser && (_fbUser.displayName || _fbUser.email)) || 'Owner',
+    createdAt: Date.now()
+  };
+  try {
+    await fetch('/api/calendar/add', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(ev)
+    });
+  } catch(e){}
+  closeGenModal();
+  showToast('✅ Cita guardada');
+  calRender();
+}
+
+async function calDeleteEvent(id) {
+  var numId = id.replace('srv_','');
+  try {
+    await fetch('/api/calendar/delete', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: parseInt(numId) })
+    });
+  } catch(e){}
+  showToast('🗑️ Cita eliminada');
+  calRender();
+}
+
+// ── Auto-check vencidos on load ──
+function jvCheckVencidos() {
+  if (typeof clients === 'undefined') return;
+  var today = new Date().toISOString().split('T')[0];
+  var vencidos = clients.filter(function(c){
+    return c.nextCall && c.nextCall < today && c.stage !== 'closed';
+  });
+  if (vencidos.length > 0) {
+    setTimeout(function(){
+      jvAddMsg('bot',
+        '⚠️ <strong>Tienes '+vencidos.length+' cliente'+(vencidos.length>1?'s':'')+' vencido'+(vencidos.length>1?'s':'')+'</strong> — di <em>"¿quiénes están vencidos?"</em> para verlos.',
+        true
+      );
+    }, 2000);
+  }
+}
+
 function jvInit() {
   if (jvInited) return;
   jvInited = true;
@@ -3988,6 +4419,33 @@ function jvSystemPrompt() {
     '9. chat_reply — respuesta conversacional (cuando NO hay acción de CRM)',
     '   params: { message: "tu respuesta" }',
     '',
+    '10. crm_delete_client — eliminar cliente del CRM',
+    '    params: clientName(requerido)',
+    '',
+    '11. crm_show_vencidos — mostrar clientes vencidos (nextCall pasada y no cerrados)',
+    '    params: {}',
+    '',
+    '12. crm_show_cerrados — mostrar clientes cerrados',
+    '    params: { period: "month/year/all" }',
+    '',
+    '13. crm_show_calientes — mostrar clientes calientes (hot)',
+    '    params: {}',
+    '',
+    '14. crm_show_tibios — mostrar clientes tibios (warm)',
+    '    params: {}',
+    '',
+    '15. crm_show_frios — mostrar clientes fríos (cold)',
+    '    params: {}',
+    '',
+    '16. income_summary — resumen de ingresos',
+    '    params: { period: "month/year/all" }',
+    '',
+    '17. crm_next_calls — ver citas/llamadas pendientes',
+    '    params: { days: 7 }',
+    '',
+    '18. crm_search — buscar cliente por nombre',
+    '    params: { query: "nombre a buscar" }',
+    '',
     'REGLAS CRÍTICAS:',
     '- SIEMPRE responde con JSON válido, sin texto antes ni después, sin markdown, sin ```',
     '- Para montos con referidos múltiples: refby+refAmount = primer referido, refName2+refAmount2 = segundo',
@@ -4134,11 +4592,180 @@ async function jvExecuteAction(cmd, originalMsg) {
       // Already shown in reply above, nothing more to do
       break;
 
+    case 'crm_delete_client':
+      jvDoDeleteClient(params);
+      break;
+
+    case 'crm_show_vencidos':
+      jvDoShowVencidos();
+      break;
+
+    case 'crm_show_cerrados':
+      jvDoShowCerrados(params);
+      break;
+
+    case 'crm_show_calientes':
+      jvDoShowByTemp('hot', '🔥 Calientes');
+      break;
+
+    case 'crm_show_tibios':
+      jvDoShowByTemp('warm', '🌡️ Tibios');
+      break;
+
+    case 'crm_show_frios':
+      jvDoShowByTemp('cold', '🧊 Fríos');
+      break;
+
+    case 'income_summary':
+      jvDoIncomeSummary(params);
+      break;
+
+    case 'crm_next_calls':
+      jvDoNextCalls(params);
+      break;
+
+    case 'crm_search':
+      jvDoSearch(params);
+      break;
+
     default:
       // Unknown action — try fallback
       await jvFallbackServer(originalMsg);
       break;
   }
+}
+
+// ── Delete client ──
+function jvDoDeleteClient(p) {
+  if (!p.clientName) { jvAddMsg('bot','❌ ¿A quién quieres eliminar?'); return; }
+  var idx = clients.findIndex(function(c){ return c.name.toLowerCase().includes(p.clientName.toLowerCase()); });
+  if (idx === -1) { jvAddMsg('bot','❌ No encontré a "'+p.clientName+'" en el CRM.'); return; }
+  var name = clients[idx].name;
+  clients.splice(idx, 1);
+  saveAll(); renderAll(); jvCrmSnap();
+  jvAddMsg('bot','🗑️ <strong>'+name+'</strong> eliminado del CRM.');
+}
+
+// ── Show by temp ──
+function jvDoShowByTemp(temp, label) {
+  var list = clients.filter(function(c){ return c.temp === temp && c.stage !== 'closed'; });
+  if (!list.length) { jvAddMsg('bot','No hay clientes '+label+' en este momento.'); return; }
+  var html = '<strong>'+label+' ('+list.length+')</strong><br><br>';
+  list.forEach(function(c) {
+    html += '👤 <strong>'+c.name+'</strong>';
+    if (c.phone) html += ' · 📞 '+c.phone;
+    if (c.stage) html += ' · 📍 '+c.stage;
+    if (c.nextCall) html += ' · 📅 '+c.nextCall;
+    html += '<br>';
+  });
+  jvAddMsg('bot', html, true);
+}
+
+// ── Show vencidos ──
+function jvDoShowVencidos() {
+  var today = new Date().toISOString().split('T')[0];
+  var list = clients.filter(function(c){
+    return c.nextCall && c.nextCall < today && c.stage !== 'closed';
+  });
+  if (!list.length) { jvAddMsg('bot','✅ No tienes clientes vencidos. ¡Todo al día!'); return; }
+  var html = '<strong>⚠️ Vencidos ('+list.length+')</strong><br><br>';
+  list.forEach(function(c) {
+    var days = Math.floor((new Date(today) - new Date(c.nextCall)) / 86400000);
+    html += '👤 <strong>'+c.name+'</strong> · 📅 '+c.nextCall+' (<span style="color:#ef4444">'+days+' días</span>)';
+    if (c.phone) html += ' · 📞 '+c.phone;
+    html += '<br>';
+  });
+  jvAddMsg('bot', html, true);
+}
+
+// ── Show cerrados ──
+function jvDoShowCerrados(p) {
+  var period = (p && p.period) || 'month';
+  var now = new Date();
+  var list = clients.filter(function(c){
+    if (c.stage !== 'closed') return false;
+    if (period === 'all') return true;
+    var d = new Date(c.closeDate || c.created);
+    if (period === 'month') return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+    if (period === 'year')  return d.getFullYear()===now.getFullYear();
+    return true;
+  });
+  if (!list.length) { jvAddMsg('bot','No hay cierres en este período.'); return; }
+  var html = '<strong>✅ Cerrados ('+list.length+')</strong><br><br>';
+  list.forEach(function(c) {
+    html += '🏆 <strong>'+c.name+'</strong>';
+    if (c.amount) html += ' · 💰 $'+Number(c.amount).toLocaleString();
+    if (c.closeDate) html += ' · 📅 '+c.closeDate;
+    html += '<br>';
+  });
+  jvAddMsg('bot', html, true);
+}
+
+// ── Income summary ──
+function jvDoIncomeSummary(p) {
+  var period = (p && p.period) || 'month';
+  var now = new Date();
+  var txs = (typeof incomeTxs !== 'undefined' ? incomeTxs : []).filter(function(tx){
+    if (period === 'all') return true;
+    var d = new Date(tx.date+'T00:00:00');
+    if (period === 'month') return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+    if (period === 'year')  return d.getFullYear()===now.getFullYear();
+    return true;
+  });
+  var total = txs.reduce(function(s,t){ return s+(t.amount||0); }, 0);
+  var refs  = txs.reduce(function(s,t){ return s+(t.refAmt||0); }, 0);
+  var net   = total - refs;
+  var html  = '<strong>💰 Ingresos '+(period==='month'?'este mes':period==='year'?'este año':'totales')+'</strong><br><br>';
+  html += '📊 Transacciones: <strong>'+txs.length+'</strong><br>';
+  html += '💵 Total bruto: <strong style="color:var(--green)">$'+total.toLocaleString()+'</strong><br>';
+  html += '💸 Referidos pagados: <strong style="color:#ef4444">-$'+refs.toLocaleString()+'</strong><br>';
+  html += '✅ Neto: <strong style="color:var(--gold)">$'+net.toLocaleString()+'</strong>';
+  jvAddMsg('bot', html, true);
+}
+
+// ── Next calls ──
+function jvDoNextCalls(p) {
+  var days = (p && p.days) || 7;
+  var today = new Date();
+  var future = new Date(today); future.setDate(future.getDate() + days);
+  var todayISO  = today.toISOString().split('T')[0];
+  var futureISO = future.toISOString().split('T')[0];
+  var list = clients.filter(function(c){
+    return c.nextCall && c.nextCall >= todayISO && c.nextCall <= futureISO && c.stage !== 'closed';
+  }).sort(function(a,b){ return a.nextCall.localeCompare(b.nextCall); });
+  if (!list.length) { jvAddMsg('bot','📅 No tienes llamadas pendientes en los próximos '+days+' días.'); return; }
+  var html = '<strong>📅 Próximas llamadas ('+list.length+')</strong><br><br>';
+  list.forEach(function(c) {
+    var d = new Date(c.nextCall+'T00:00:00');
+    var label = d.toLocaleDateString('es',{weekday:'short',month:'short',day:'numeric'});
+    html += '📞 <strong>'+c.name+'</strong> · '+label;
+    if (c.phone) html += ' · '+c.phone;
+    html += '<br>';
+  });
+  jvAddMsg('bot', html, true);
+}
+
+// ── Search client ──
+function jvDoSearch(p) {
+  var q = (p && p.query || '').toLowerCase();
+  if (!q) { jvAddMsg('bot','❌ ¿Qué nombre buscas?'); return; }
+  var list = clients.filter(function(c){
+    return c.name.toLowerCase().includes(q) ||
+           (c.phone||'').includes(q) ||
+           (c.email||'').toLowerCase().includes(q);
+  });
+  if (!list.length) { jvAddMsg('bot','❌ No encontré a "'+p.query+'" en el CRM.'); return; }
+  var html = '<strong>🔍 Resultados para "'+p.query+'" ('+list.length+')</strong><br><br>';
+  list.forEach(function(c) {
+    html += '👤 <strong>'+c.name+'</strong>';
+    if (c.phone) html += ' · 📞 '+c.phone;
+    if (c.stage) html += ' · '+c.stage;
+    if (c.temp==='hot') html += ' 🔥';
+    else if (c.temp==='warm') html += ' 🌡️';
+    else html += ' 🧊';
+    html += '<br>';
+  });
+  jvAddMsg('bot', html, true);
 }
 
 // ── Confirm buttons for uncertain actions ──
