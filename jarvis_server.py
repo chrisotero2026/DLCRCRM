@@ -16,8 +16,8 @@ CORS(app)
 DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
 MEMORY_DIR = os.path.join(os.path.dirname(__file__), "memory")
 # Look for index.html in dashboard/ or root
-_dash_check = os.path.join(os.path.dirname(__file__), "dashboard")
-DASH_DIR = _dash_check if os.path.exists(os.path.join(_dash_check, "index.html")) else os.path.dirname(__file__)
+DASH_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 os.makedirs(DATA_DIR,   exist_ok=True)
 os.makedirs(MEMORY_DIR, exist_ok=True)
