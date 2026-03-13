@@ -3698,61 +3698,54 @@ var JV_CMDS = [
 
 
 // ══════════════════════════════════════════════════════════════
-//  CALENDAR ENGINE — Google Calendar style
+//  CALENDAR ENGINE
 // ══════════════════════════════════════════════════════════════
+var _calView = 'month';
+var _calDate = new Date();
+var _calEvents = [];
+var CAL_MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+var CAL_DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+var CAL_COLORS = ['#3b82f6','#f0a500','#22c55e','#a855f7','#ef4444','#06b6d4','#f97316','#ec4899','#14b8a6','#84cc16'];
 
-var _calView   = 'month';  // month | week | day
-var _calDate   = new Date();
-var _calEvents = [];  // combined: CRM nextCalls + manual events
+function calDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function calWeekStart(d) {
+  var s = new Date(d);
+  s.setDate(s.getDate() - s.getDay());
+  return s;
+}
+function calEventsForDate(ds) {
+  return _calEvents.filter(function(e){ return e.date === ds; })
+    .sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+}
 
-var CAL_COLORS = [
-  '#3b82f6','#f0a500','#22c55e','#a855f7','#ef4444',
-  '#06b6d4','#f97316','#ec4899','#14b8a6','#84cc16'
-];
-
-// ── Load all events ──
 function calLoadEvents() {
   _calEvents = [];
-  var colorMap = {};
-  var colorIdx = 0;
-
-  // 1. CRM clients nextCall dates
+  var colorMap = {}, colorIdx = 0;
   if (typeof clients !== 'undefined') {
     clients.forEach(function(c) {
       if (!c.nextCall || c.stage === 'closed') return;
       var uid = c.createdBy || 'owner';
-      if (!colorMap[uid]) { colorMap[uid] = CAL_COLORS[colorIdx++ % CAL_COLORS.length]; }
+      if (!colorMap[uid]) colorMap[uid] = CAL_COLORS[colorIdx++ % CAL_COLORS.length];
       _calEvents.push({
-        id:      'crm_' + c.id,
-        title:   '📞 ' + c.name,
-        date:    c.nextCall,
-        time:    c.nextCallTime || '',
-        color:   colorMap[uid],
-        type:    'call',
-        agent:   c.createdByName || 'Owner',
-        agentId: uid,
-        clientId: c.id,
-        phone:   c.phone || '',
-        notes:   c.notes || ''
+        id: 'crm_' + c.id, title: '📞 ' + c.name,
+        date: c.nextCall, time: c.nextCallTime || '',
+        color: colorMap[uid], type: 'call',
+        agent: c.createdByName || 'Owner', phone: c.phone || '', notes: c.notes || ''
       });
     });
   }
-
-  // 2. Manual events from server calendar
   fetch('/api/calendar/events')
     .then(function(r){ return r.json(); })
     .then(function(d){
       (d.events || []).forEach(function(e) {
         if (!e.date) return;
         _calEvents.push({
-          id:    'srv_' + e.id,
-          title: e.title || e.notes || 'Cita',
-          date:  e.date,
-          time:  e.time || '',
-          color: '#22c55e',
-          type:  'manual',
-          agent: e.agent || 'Owner',
-          notes: e.notes || ''
+          id: 'srv_' + e.id, title: e.title || e.notes || 'Cita',
+          date: e.date, time: e.time || '',
+          color: '#22c55e', type: 'manual',
+          agent: e.agent || 'Owner', notes: e.notes || ''
         });
       });
       calRenderBody();
@@ -3760,52 +3753,41 @@ function calLoadEvents() {
     .catch(function(){ calRenderBody(); });
 }
 
-// ── Navigate ──
 function calPrev() {
-  if (_calView === 'month') {
-    _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth() - 1, 1);
-  } else if (_calView === 'week') {
-    _calDate = new Date(_calDate.getTime() - 7 * 86400000);
-  } else {
-    _calDate = new Date(_calDate.getTime() - 86400000);
-  }
+  if (_calView === 'month') _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth()-1, 1);
+  else if (_calView === 'week') _calDate = new Date(_calDate.getTime() - 7*86400000);
+  else _calDate = new Date(_calDate.getTime() - 86400000);
   calRender();
 }
 function calNext() {
-  if (_calView === 'month') {
-    _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth() + 1, 1);
-  } else if (_calView === 'week') {
-    _calDate = new Date(_calDate.getTime() + 7 * 86400000);
-  } else {
-    _calDate = new Date(_calDate.getTime() + 86400000);
-  }
+  if (_calView === 'month') _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth()+1, 1);
+  else if (_calView === 'week') _calDate = new Date(_calDate.getTime() + 7*86400000);
+  else _calDate = new Date(_calDate.getTime() + 86400000);
   calRender();
 }
 function calGoToday() { _calDate = new Date(); calRender(); }
 function calSetView(v) {
   _calView = v;
   document.querySelectorAll('.cal-view-btn').forEach(function(b){ b.classList.remove('active'); });
-  document.getElementById('calBtn' + v.charAt(0).toUpperCase() + v.slice(1)).classList.add('active');
+  var btn = document.getElementById('calBtn' + v.charAt(0).toUpperCase() + v.slice(1));
+  if (btn) btn.classList.add('active');
   calRender();
 }
 
-// ── Main render ──
 function calRender() {
-  calLoadEvents();
-  // Title
   var title = '';
-  var months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   if (_calView === 'month') {
-    title = months[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
+    title = CAL_MONTHS[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
   } else if (_calView === 'week') {
     var ws = calWeekStart(_calDate);
     var we = new Date(ws.getTime() + 6*86400000);
-    title = months[ws.getMonth()]+' '+ws.getDate()+' – '+months[we.getMonth()]+' '+we.getDate()+', '+we.getFullYear();
+    title = CAL_MONTHS[ws.getMonth()] + ' ' + ws.getDate() + ' – ' + CAL_MONTHS[we.getMonth()] + ' ' + we.getDate() + ', ' + we.getFullYear();
   } else {
-    title = days[_calDate.getDay()] + ' ' + _calDate.getDate() + ' de ' + months[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
+    title = CAL_DAYS[_calDate.getDay()] + ' ' + _calDate.getDate() + ' de ' + CAL_MONTHS[_calDate.getMonth()] + ' ' + _calDate.getFullYear();
   }
-  document.getElementById('calTitle').textContent = title;
+  var titleEl = document.getElementById('calTitle');
+  if (titleEl) titleEl.textContent = title;
+  calLoadEvents();
 }
 
 function calRenderBody() {
@@ -3817,231 +3799,186 @@ function calRenderBody() {
   calRenderLegend();
 }
 
-function calWeekStart(d) {
-  var s = new Date(d);
-  s.setDate(s.getDate() - s.getDay());
-  return s;
-}
-
-function calDateStr(d) {
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-
-function calEventsForDate(dateStr) {
-  return _calEvents.filter(function(e){ return e.date === dateStr; })
-    .sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
-}
-
-// ── Month view ──
 function calRenderMonth(body) {
   var today = calDateStr(new Date());
-  var year  = _calDate.getFullYear();
-  var month = _calDate.getMonth();
+  var year = _calDate.getFullYear(), month = _calDate.getMonth();
   var first = new Date(year, month, 1);
   var last  = new Date(year, month+1, 0);
-  var days  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-
-  var html = '<div class="cal-grid-month">';
-  days.forEach(function(d){ html += '<div class="cal-dow">'+d+'</div>'; });
-
-  // Pad start
+  var h = '<div class="cal-grid-month">';
+  CAL_DAYS.forEach(function(d){ h += '<div class="cal-dow">' + d + '</div>'; });
   var startDay = first.getDay();
   for (var i = 0; i < startDay; i++) {
     var pd = new Date(year, month, -startDay+i+1);
-    html += '<div class="cal-day other-month"><div class="cal-day-num">'+pd.getDate()+'</div></div>';
+    h += '<div class="cal-day other-month"><div class="cal-day-num">' + pd.getDate() + '</div></div>';
   }
-
-  // Days of month
   for (var d2 = 1; d2 <= last.getDate(); d2++) {
-    var ds = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d2).padStart(2,'0');
+    var ds = year + '-' + String(month+1).padStart(2,'0') + '-' + String(d2).padStart(2,'0');
     var evs = calEventsForDate(ds);
-    var cls = 'cal-day' + (ds===today?' today':'');
-    html += '<div class="'+cls+'" onclick="calDayClick(''+ds+'')">';
-    html += '<div class="cal-day-num">'+d2+'</div>';
-    evs.slice(0,3).forEach(function(e){
-      html += '<div class="cal-event" style="background:'+e.color+'22;color:'+e.color+';border-left:2px solid '+e.color+'" onclick="event.stopPropagation();calShowEvent(''+e.id+'')">'+
-        (e.time?e.time.substring(0,5)+' ':'')+e.title+'</div>';
+    var cls = 'cal-day' + (ds === today ? ' today' : '');
+    h += '<div class="' + cls + '" onclick="calDayClick(\'' + ds + '\')">';
+    h += '<div class="cal-day-num">' + d2 + '</div>';
+    evs.slice(0,3).forEach(function(e) {
+      var t = e.time ? e.time.substring(0,5) + ' ' : '';
+      h += '<div class="cal-event" style="background:' + e.color + '22;color:' + e.color + ';border-left:2px solid ' + e.color + '" onclick="event.stopPropagation();calShowEvent(\'' + e.id + '\')">' + t + e.title + '</div>';
     });
-    if (evs.length > 3) html += '<div style="font-size:9px;color:var(--muted);padding:1px 3px">+' + (evs.length-3) + ' más</div>';
-    html += '</div>';
+    if (evs.length > 3) h += '<div style="font-size:9px;color:var(--muted);padding:1px 3px">+' + (evs.length-3) + ' más</div>';
+    h += '</div>';
   }
-
-  // Pad end
   var endDay = last.getDay();
   for (var j = endDay+1; j <= 6; j++) {
-    html += '<div class="cal-day other-month"><div class="cal-day-num">'+(j-endDay)+'</div></div>';
+    h += '<div class="cal-day other-month"><div class="cal-day-num">' + j + '</div></div>';
   }
-  html += '</div>';
-  body.innerHTML = html;
+  h += '</div>';
+  body.innerHTML = h;
 }
 
-// ── Week view ──
 function calRenderWeek(body) {
-  var today  = calDateStr(new Date());
-  var ws     = calWeekStart(_calDate);
-  var days   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  var hours  = [];
-  for (var h = 7; h <= 20; h++) hours.push(h);
-
-  var html = '<div class="cal-week-grid" style="border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden">';
-  html += '<div style="background:rgba(255,255,255,.02)"></div>';
-
+  var today = calDateStr(new Date());
+  var ws = calWeekStart(_calDate);
+  var hours = [];
+  for (var hh = 7; hh <= 20; hh++) hours.push(hh);
+  var h = '<div class="cal-week-grid" style="border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden">';
+  h += '<div style="background:rgba(255,255,255,.02)"></div>';
   for (var di = 0; di < 7; di++) {
     var dd = new Date(ws.getTime() + di*86400000);
     var ds = calDateStr(dd);
-    var isToday = ds === today;
-    html += '<div class="cal-week-header'+(isToday?' today-col':'')+'">'+days[di]+'<br><span style="font-size:16px;font-weight:800'+(isToday?';color:var(--gold)':'')+'">'+dd.getDate()+'</span></div>';
+    var isT = ds === today;
+    var cls2 = 'cal-week-header' + (isT ? ' today-col' : '');
+    var numStyle = isT ? 'font-size:16px;font-weight:800;color:var(--gold)' : 'font-size:16px;font-weight:800';
+    h += '<div class="' + cls2 + '">' + CAL_DAYS[di] + '<br><span style="' + numStyle + '">' + dd.getDate() + '</span></div>';
   }
-
-  hours.forEach(function(h) {
-    html += '<div class="cal-time-label">'+String(h).padStart(2,'0')+':00</div>';
+  hours.forEach(function(hr) {
+    h += '<div class="cal-time-label">' + String(hr).padStart(2,'0') + ':00</div>';
     for (var di2 = 0; di2 < 7; di2++) {
       var dd2 = new Date(ws.getTime() + di2*86400000);
       var ds2 = calDateStr(dd2);
-      var slotEvs = calEventsForDate(ds2).filter(function(e){
-        if (!e.time) return h === 9;
-        return parseInt(e.time.split(':')[0]) === h;
+      var slotEvs = calEventsForDate(ds2).filter(function(e) {
+        if (!e.time) return hr === 9;
+        return parseInt(e.time.split(':')[0]) === hr;
       });
-      html += '<div class="cal-week-col" onclick="calDayClick(''+ds2+'')" style="padding:2px">';
-      slotEvs.forEach(function(e){
-        html += '<div class="cal-event" style="background:'+e.color+'22;color:'+e.color+';border-left:2px solid '+e.color+';padding:3px 5px;border-radius:4px;margin-bottom:2px;font-size:10px" onclick="event.stopPropagation();calShowEvent(''+e.id+'')">'+e.title+'</div>';
+      h += '<div class="cal-week-col" onclick="calDayClick(\'' + ds2 + '\')" style="padding:2px">';
+      slotEvs.forEach(function(e) {
+        h += '<div class="cal-event" style="background:' + e.color + '22;color:' + e.color + ';border-left:2px solid ' + e.color + ';padding:3px 5px;border-radius:4px;margin-bottom:2px;font-size:10px" onclick="event.stopPropagation();calShowEvent(\'' + e.id + '\')">' + e.title + '</div>';
       });
-      html += '</div>';
+      h += '</div>';
     }
   });
-  html += '</div>';
-  body.innerHTML = html;
+  h += '</div>';
+  body.innerHTML = h;
 }
 
-// ── Day view ──
 function calRenderDay(body) {
-  var ds   = calDateStr(_calDate);
-  var evs  = calEventsForDate(ds);
+  var ds = calDateStr(_calDate);
+  var evs = calEventsForDate(ds);
   var hours = [];
-  for (var h = 7; h <= 21; h++) hours.push(h);
-
-  var html = '<div class="cal-day-view">';
-  hours.forEach(function(h) {
-    var slotEvs = evs.filter(function(e){
-      if (!e.time) return h === 9;
-      return parseInt(e.time.split(':')[0]) === h;
+  for (var hh = 7; hh <= 21; hh++) hours.push(hh);
+  var h = '<div class="cal-day-view">';
+  hours.forEach(function(hr) {
+    var slotEvs = evs.filter(function(e) {
+      if (!e.time) return hr === 9;
+      return parseInt(e.time.split(':')[0]) === hr;
     });
-    html += '<div class="cal-day-slot">';
-    html += '<div class="cal-day-slot-time">'+String(h).padStart(2,'0')+':00</div>';
-    html += '<div class="cal-day-slot-events">';
-    if (slotEvs.length) {
-      slotEvs.forEach(function(e){
-        html += '<div class="cal-event-card" style="border-left-color:'+e.color+';background:'+e.color+'15" onclick="calShowEvent(''+e.id+'')">';
-        html += '<div style="font-weight:700;font-size:13px">'+e.title+'</div>';
-        if (e.time) html += '<div style="font-size:11px;color:var(--muted)">⏰ '+e.time+'</div>';
-        if (e.agent) html += '<div style="font-size:11px;color:var(--muted)">👤 '+e.agent+'</div>';
-        if (e.notes) html += '<div style="font-size:11px;color:var(--muted);margin-top:3px">📝 '+e.notes+'</div>';
-        html += '</div>';
-      });
-    }
-    html += '</div></div>';
+    h += '<div class="cal-day-slot">';
+    h += '<div class="cal-day-slot-time">' + String(hr).padStart(2,'0') + ':00</div>';
+    h += '<div class="cal-day-slot-events">';
+    slotEvs.forEach(function(e) {
+      h += '<div class="cal-event-card" style="border-left-color:' + e.color + ';background:' + e.color + '15" onclick="calShowEvent(\'' + e.id + '\')">';
+      h += '<div style="font-weight:700;font-size:13px">' + e.title + '</div>';
+      if (e.time) h += '<div style="font-size:11px;color:var(--muted)">⏰ ' + e.time + '</div>';
+      if (e.agent) h += '<div style="font-size:11px;color:var(--muted)">👤 ' + e.agent + '</div>';
+      if (e.notes) h += '<div style="font-size:11px;color:var(--muted);margin-top:3px">📝 ' + e.notes + '</div>';
+      h += '</div>';
+    });
+    h += '</div></div>';
   });
-  html += '</div>';
-  body.innerHTML = html;
+  h += '</div>';
+  body.innerHTML = h;
 }
 
-// ── Legend ──
 function calRenderLegend() {
   var agents = {};
   _calEvents.forEach(function(e){ if(e.agent) agents[e.agent] = e.color; });
-  var html = '';
-  Object.keys(agents).forEach(function(a){
-    html += '<div class="cal-legend-item"><div class="cal-legend-dot" style="background:'+agents[a]+'"></div>'+a+'</div>';
+  var h = '';
+  Object.keys(agents).forEach(function(a) {
+    h += '<div class="cal-legend-item"><div class="cal-legend-dot" style="background:' + agents[a] + '"></div>' + a + '</div>';
   });
   var leg = document.getElementById('calLegend');
-  if (leg) leg.innerHTML = html;
+  if (leg) leg.innerHTML = h;
 }
 
-// ── Day click ──
-function calDayClick(dateStr) {
+function calDayClick(ds) {
   _calView = 'day';
-  _calDate = new Date(dateStr + 'T12:00:00');
+  _calDate = new Date(ds + 'T12:00:00');
   document.querySelectorAll('.cal-view-btn').forEach(function(b){ b.classList.remove('active'); });
   var btn = document.getElementById('calBtnDay');
   if (btn) btn.classList.add('active');
   calRender();
 }
 
-// ── Show event detail ──
 function calShowEvent(id) {
   var ev = _calEvents.find(function(e){ return e.id === id; });
   if (!ev) return;
-  var html = '<div>';
-  html += '<div style="font-size:16px;font-weight:800;margin-bottom:12px">'+ev.title+'</div>';
-  html += '<div style="font-size:13px;color:var(--muted);margin-bottom:6px">📅 '+ev.date+(ev.time?' · ⏰ '+ev.time:'')+'</div>';
-  if (ev.agent) html += '<div style="font-size:13px;margin-bottom:6px">👤 '+ev.agent+'</div>';
-  if (ev.phone) html += '<div style="font-size:13px;margin-bottom:6px">📞 <a href="tel:'+ev.phone+'" style="color:var(--blue2)">'+ev.phone+'</a></div>';
-  if (ev.notes) html += '<div style="font-size:13px;margin-bottom:12px">📝 '+ev.notes+'</div>';
-  if (ev.type === 'call' && ev.phone) {
-    html += '<button onclick="window.open('tel:'+ev.phone+'');closeGenModal()" style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">📞 Llamar</button>';
-  }
-  if (ev.type === 'manual') {
-    html += '<button onclick="calDeleteEvent(''+id+'');closeGenModal()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🗑️ Eliminar</button>';
-  }
-  html += '<button onclick="closeGenModal()" style="margin-left:8px;background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Cerrar</button>';
-  html += '</div>';
-  openGenModal(html);
+  var h = '<div>';
+  h += '<div style="font-size:16px;font-weight:800;margin-bottom:12px">' + ev.title + '</div>';
+  h += '<div style="font-size:13px;color:var(--muted);margin-bottom:6px">📅 ' + ev.date + (ev.time ? ' · ⏰ ' + ev.time : '') + '</div>';
+  if (ev.agent) h += '<div style="font-size:13px;margin-bottom:6px">👤 ' + ev.agent + '</div>';
+  if (ev.phone) h += '<div style="font-size:13px;margin-bottom:6px">📞 ' + ev.phone + '</div>';
+  if (ev.notes) h += '<div style="font-size:13px;margin-bottom:12px">📝 ' + ev.notes + '</div>';
+  if (ev.phone) h += '<button onclick="window.open(\'tel:' + ev.phone + '\');closeGenModal()" style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">📞 Llamar</button>';
+  if (ev.type === 'manual') h += '<button onclick="calDeleteEvent(\'' + id + '\');closeGenModal()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">🗑️ Eliminar</button>';
+  h += '<button onclick="closeGenModal()" style="background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Cerrar</button>';
+  h += '</div>';
+  openGenModal(h);
 }
 
-// ── Add event modal ──
 function calAddEvent() {
   var todayStr = calDateStr(_calDate);
-  var html = '<div>';
-  html += '<div style="font-size:16px;font-weight:800;margin-bottom:16px">📅 Nueva Cita</div>';
-  html += '<div style="margin-bottom:10px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Título</label>';
-  html += '<input id="calEvTitle" type="text" placeholder="Ej: Reunión con cliente" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
-  html += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Fecha</label>';
-  html += '<input id="calEvDate" type="date" value="'+todayStr+'" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
-  html += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hora</label>';
-  html += '<input id="calEvTime" type="time" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div></div>';
-  html += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Notas</label>';
-  html += '<input id="calEvNotes" type="text" placeholder="Opcional..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
-  html += '<div style="display:flex;gap:8px">';
-  html += '<button onclick="calSaveEvent()" style="flex:1;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar</button>';
-  html += '<button onclick="closeGenModal()" style="padding:10px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>';
-  html += '</div></div>';
-  openGenModal(html);
+  var h = '<div>';
+  h += '<div style="font-size:16px;font-weight:800;margin-bottom:16px">📅 Nueva Cita</div>';
+  h += '<div style="margin-bottom:10px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Título</label>';
+  h += '<input id="calEvTitle" type="text" placeholder="Ej: Reunión con cliente" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Fecha</label>';
+  h += '<input id="calEvDate" type="date" value="' + todayStr + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Hora</label>';
+  h += '<input id="calEvTime" type="time" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div></div>';
+  h += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px">Notas</label>';
+  h += '<input id="calEvNotes" type="text" placeholder="Opcional..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button onclick="calSaveEvent()" style="flex:1;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar</button>';
+  h += '<button onclick="closeGenModal()" style="padding:10px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>';
+  h += '</div></div>';
+  openGenModal(h);
 }
 
 async function calSaveEvent() {
-  var title = (document.getElementById('calEvTitle').value||'').trim();
+  var title = (document.getElementById('calEvTitle').value || '').trim();
   var date  = document.getElementById('calEvDate').value;
   var time  = document.getElementById('calEvTime').value;
-  var notes = (document.getElementById('calEvNotes').value||'').trim();
+  var notes = (document.getElementById('calEvNotes').value || '').trim();
   if (!title || !date) { showToast('⚠️ Título y fecha son requeridos'); return; }
-  var ev = {
-    title: title, date: date, time: time, notes: notes,
+  var ev = { title: title, date: date, time: time, notes: notes,
     agent: (_fbUser && (_fbUser.displayName || _fbUser.email)) || 'Owner',
-    createdAt: Date.now()
-  };
+    createdAt: Date.now() };
   try {
-    await fetch('/api/calendar/add', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(ev)
-    });
-  } catch(e){}
+    await fetch('/api/calendar/add', { method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ev) });
+  } catch(e) {}
   closeGenModal();
   showToast('✅ Cita guardada');
   calRender();
 }
 
 async function calDeleteEvent(id) {
-  var numId = id.replace('srv_','');
+  var numId = parseInt(id.replace('srv_',''));
   try {
-    await fetch('/api/calendar/delete', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ id: parseInt(numId) })
-    });
-  } catch(e){}
+    await fetch('/api/calendar/delete', { method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: numId }) });
+  } catch(e) {}
   showToast('🗑️ Cita eliminada');
   calRender();
 }
+
 
 // ── Auto-check vencidos on load ──
 function jvCheckVencidos() {
