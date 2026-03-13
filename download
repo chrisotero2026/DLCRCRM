@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+jarvis-env/
+venv/
+*.log
+data/
+memory/
