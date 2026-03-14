@@ -3832,7 +3832,6 @@ function renderMyIncome() {
     kpis.innerHTML = [
       { ico:'💰', lbl:lang==='es'?'Total':'Total',              val:'$'+total.toLocaleString(),     col:'var(--gold)' },
       { ico:'📅', lbl:lang==='es'?'Este mes':'This month',    val:'$'+monthTotal.toLocaleString(),col:'var(--green)' },
-      { ico:'🤝', lbl:lang==='es'?'Referidos':'Referrals',    val:'-$'+refs.toLocaleString(),     col:'#ef4444' },
       { ico:'✅', lbl:lang==='es'?'Neto':'Net',               val:'$'+net.toLocaleString(),       col:'var(--blue2)' },
       { ico:'📊', lbl:lang==='es'?'Transacciones':'Transactions', val:txs.length,                 col:'var(--muted)' },
     ].map(function(k) {
@@ -3854,19 +3853,92 @@ function renderMyIncome() {
   var sorted = txs.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   list.innerHTML = sorted.map(function(tx) {
     var catIco = {real_estate:'🏠',loan:'🏦',referral:'🤝',other:'📋'}[tx.category||'other'] || '📋';
-    var refStr = tx.refAmt ? (' <span style="color:#ef4444;font-size:11px">-$'+Number(tx.refAmt).toLocaleString()+' ref</span>') : '';
-    return '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
-      '<div>' +
-        '<div style="font-weight:700;font-size:14px">' + catIco + ' ' + (tx.client||tx.clientName||'—') + '</div>' +
-        '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + (tx.date||'') + ' · ' + (tx.category||'') + (tx.type?' · '+tx.type:'') + '</div>' +
-        (tx.notes ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 '+tx.notes+'</div>' : '') +
+    var isEs = lang === 'es';
+    return '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:14px">' + catIco + ' ' + (tx.client||tx.clientName||'—') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + (tx.date||'') + ' · ' + (tx.category||'') + (tx.type?' · '+tx.type:'') + '</div>' +
+          (tx.notes ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 '+tx.notes+'</div>' : '') +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:20px;font-weight:800;color:var(--green)">$' + Number(tx.amount||0).toLocaleString() + '</div>' +
+        '</div>' +
       '</div>' +
-      '<div style="text-align:right">' +
-        '<div style="font-size:18px;font-weight:800;color:var(--green)">$' + Number(tx.amount||0).toLocaleString() + '</div>' +
-        refStr +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button onclick="editMyIncome(' + tx.id + ')" style="font-size:11px;font-weight:700;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);color:var(--gold);padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">✏️ ' + (isEs?'Editar':'Edit') + '</button>' +
+        '<button onclick="deleteMyIncome(' + tx.id + ')" style="font-size:11px;font-weight:700;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#ef4444;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">🗑️ ' + (isEs?'Eliminar':'Delete') + '</button>' +
       '</div>' +
     '</div>';
   }).join('');
+}
+
+function deleteMyIncome(id) {
+  if (!confirm(lang === 'es' ? '¿Eliminar este ingreso?' : 'Delete this income?')) return;
+  if (typeof incomeTxs !== 'undefined') {
+    incomeTxs = incomeTxs.filter(function(t){ return t.id !== id; });
+    if (typeof saveAll === 'function') saveAll();
+  }
+  showToast('🗑️ ' + (lang === 'es' ? 'Ingreso eliminado' : 'Income deleted'));
+  renderMyIncome();
+}
+
+function editMyIncome(id) {
+  var tx = (typeof incomeTxs !== 'undefined') ? incomeTxs.find(function(t){ return t.id === id; }) : null;
+  if (!tx) return;
+  var isEs = lang === 'es';
+  var h = '<div>';
+  h += '<div style="font-size:16px;font-weight:800;margin-bottom:16px">✏️ ' + (isEs ? 'Editar Ingreso' : 'Edit Income') + '</div>';
+
+  h += '<div style="margin-bottom:10px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Cliente':'Client') + '</label>';
+  h += '<input id="ei-client" type="text" value="' + (tx.client||tx.clientName||'') + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Monto ($)':'Amount ($)') + '</label>';
+  h += '<input id="ei-amount" type="number" value="' + (tx.amount||0) + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Fecha':'Date') + '</label>';
+  h += '<input id="ei-date" type="date" value="' + (tx.date||'') + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div></div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Categoría':'Category') + '</label>';
+  h += '<select id="ei-cat" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none">';
+  h += '<option value="real_estate"' + (tx.category==='real_estate'?' selected':'') + '>🏠 Real Estate</option>';
+  h += '<option value="loan"' + (tx.category==='loan'?' selected':'') + '>🏦 ' + (isEs?'Préstamo':'Loan') + '</option>';
+  h += '<option value="other"' + (tx.category==='other'?' selected':'') + '>📋 ' + (isEs?'Otro':'Other') + '</option>';
+  h += '</select></div>';
+  h += '<div><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Tipo':'Type') + '</label>';
+  h += '<select id="ei-type" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none">';
+  h += '<option value="buy"' + (tx.type==='buy'?' selected':'') + '>🏡 ' + (isEs?'Compra':'Buy') + '</option>';
+  h += '<option value="sell"' + (tx.type==='sell'?' selected':'') + '>💰 ' + (isEs?'Venta':'Sell') + '</option>';
+  h += '<option value="refi"' + (tx.type==='refi'?' selected':'') + '>🔄 Refinance</option>';
+  h += '<option value="loan"' + (tx.type==='loan'?' selected':'') + '>🏦 Loan</option>';
+  h += '</select></div></div>';
+
+  h += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs?'Notas':'Notes') + '</label>';
+  h += '<input id="ei-notes" type="text" value="' + (tx.notes||'') + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
+
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button onclick="saveEditMyIncome(' + id + ')" style="flex:1;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">💾 ' + (isEs?'Guardar':'Save') + '</button>';
+  h += '<button onclick="closeGenModal()" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">' + (isEs?'Cancelar':'Cancel') + '</button>';
+  h += '</div></div>';
+  openGenModal(h);
+}
+
+function saveEditMyIncome(id) {
+  if (typeof incomeTxs === 'undefined') return;
+  var idx = incomeTxs.findIndex(function(t){ return t.id === id; });
+  if (idx === -1) return;
+  incomeTxs[idx].client      = (document.getElementById('ei-client').value||'').trim();
+  incomeTxs[idx].clientName  = incomeTxs[idx].client;
+  incomeTxs[idx].amount      = parseFloat(document.getElementById('ei-amount').value)||0;
+  incomeTxs[idx].date        = document.getElementById('ei-date').value;
+  incomeTxs[idx].category    = document.getElementById('ei-cat').value;
+  incomeTxs[idx].type        = document.getElementById('ei-type').value;
+  incomeTxs[idx].notes       = (document.getElementById('ei-notes').value||'').trim();
+  if (typeof saveAll === 'function') saveAll();
+  closeGenModal();
+  showToast('✅ ' + (lang === 'es' ? 'Ingreso actualizado' : 'Income updated'));
+  renderMyIncome();
 }
 
 function showAddMyIncome() {
@@ -3893,12 +3965,6 @@ function showAddMyIncome() {
   h += '<option value="buy">🏡 ' + (isEs ? 'Compra' : 'Buy') + '</option><option value="sell">💰 ' + (isEs ? 'Venta' : 'Sell') + '</option><option value="refi">🔄 Refinance</option><option value="loan">🏦 Loan</option><option value="referral">🤝 ' + (isEs ? 'Referido' : 'Referral') + '</option>';
   h += '</select></div></div>';
 
-  h += '<div style="margin-bottom:10px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs ? 'Referido (nombre)' : 'Referral (name)') + '</label>';
-  h += '<input id="mi-ref" type="text" placeholder="' + (isEs ? 'Opcional' : 'Optional') + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
-
-  h += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs ? 'Comisión referido ($)' : 'Referral commission ($)') + '</label>';
-  h += '<input id="mi-refamt" type="number" placeholder="0" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
-
   h += '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">' + (isEs ? 'Notas' : 'Notes') + '</label>';
   h += '<input id="mi-notes" type="text" placeholder="' + (isEs ? 'Opcional' : 'Optional') + '" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:inherit;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"></div>';
 
@@ -3915,8 +3981,6 @@ function saveMyIncome() {
   var date   = document.getElementById('mi-date').value;
   var cat    = document.getElementById('mi-cat').value;
   var type   = document.getElementById('mi-type').value;
-  var ref    = (document.getElementById('mi-ref').value || '').trim();
-  var refAmt = parseFloat(document.getElementById('mi-refamt').value) || 0;
   var notes  = (document.getElementById('mi-notes').value || '').trim();
   if (!client || !amount) { showToast('⚠️ ' + (lang === 'es' ? 'Cliente y monto son requeridos' : 'Client and amount are required')); return; }
   var tx = {
@@ -3924,7 +3988,6 @@ function saveMyIncome() {
     client: client, clientName: client,
     amount: amount, date: date,
     category: cat, type: type,
-    refby: ref, refAmt: refAmt,
     notes: notes,
     createdBy: _fbUserId || 'owner',
     createdByName: (_fbUser && (_fbUser.displayName || _fbUser.email)) || 'Owner',
