@@ -1860,13 +1860,7 @@ function switchTab(tab){
   if(tab==='income')     { renderIncome(); initTxDate(); }
   if(tab==='table')      renderTable();
   if(tab==='mort')       { populateMortClients(); calcMort(); }
-  if(tab==='jarvis')     {
-    jvInit();
-    // Clear proactive notification badge
-    var jvTab = document.getElementById('tab-jarvis');
-    var badge = jvTab && jvTab.querySelector('.jv-notif');
-    if (badge) badge.remove();
-  }
+  if(tab==='jarvis')     { jvInit(); }
   if(tab==='calendar')   { calRender(); }
   if(tab==='myincome')   { renderMyIncome(); }
 }
@@ -4486,14 +4480,10 @@ function updateUserHeader() {
 
 var JV_API      = window.location.origin + '/api';
 var jvInited    = false;
-var jvListening    = false;
-var jvRec          = null;
-var jvMems         = [];
-var jvLang         = 'es';
-var jvHistory      = [];   // Level 1: conversation history (this session)
-var jvLongMem      = [];   // Level 2: long-term memory (across sessions)
-var jvProactiveInt = null; // Level 3: proactive check interval
-var JV_MAX_HISTORY = 20;   // Keep last 20 messages in context
+var jvListening = false;
+var jvRec       = null;
+var jvMems      = [];
+var jvLang      = 'es';   // sigue el idioma del CRM
 
 // Commands bilinguals
 var JV_CATS = [
@@ -5246,85 +5236,9 @@ function jvInit() {
   jvBuildCmds();
   jvCheckStatus();
   jvLoadMem();
-  jvLoadLongMem();
   jvCrmSnap();
   jvCheckVencidos();
   setInterval(jvCheckStatus, 30000);
-  // Level 3: Proactive checks every 5 minutes
-  if (jvProactiveInt) clearInterval(jvProactiveInt);
-  jvProactiveInt = setInterval(jvProactiveCheck, 5 * 60 * 1000);
-  // Run once after 30 seconds
-  setTimeout(jvProactiveCheck, 30000);
-}
-
-// ── Level 3: Proactive Jarvis ──
-var _jvLastProactive = 0;
-async function jvProactiveCheck() {
-  if (typeof clients === 'undefined') return;
-  var now = new Date();
-  var todayISO = now.toISOString().split('T')[0];
-  var hour = now.getHours();
-  var isEs = lang === 'es';
-
-  // Don't spam — only if Jarvis tab is active or 30+ minutes since last
-  var timeSinceLast = Date.now() - _jvLastProactive;
-  if (timeSinceLast < 30 * 60 * 1000 && document.getElementById('tab-jarvis') && !document.getElementById('tab-jarvis').classList.contains('active')) return;
-
-  var alerts = [];
-
-  // 1. Overdue clients
-  var venc = clients.filter(function(c){ return c.nextCall && c.nextCall < todayISO && c.stage !== 'closed'; });
-  if (venc.length > 0) {
-    alerts.push('⚠️ <strong>' + venc.length + (isEs ? ' clientes vencidos</strong> — ' : ' overdue clients</strong> — ') +
-      venc.slice(0,3).map(function(c){ return c.name; }).join(', ') +
-      (venc.length > 3 ? (isEs ? ' y más...' : ' and more...') : ''));
-  }
-
-  // 2. Today's calls
-  var todayCalls = clients.filter(function(c){ return c.nextCall === todayISO && c.stage !== 'closed'; });
-  if (todayCalls.length > 0 && hour >= 8 && hour <= 10) {
-    alerts.push('📅 <strong>' + (isEs ? 'Tienes ' + todayCalls.length + ' llamadas hoy</strong>: ' : todayCalls.length + ' calls today</strong>: ') +
-      todayCalls.map(function(c){ return c.name; }).join(', '));
-  }
-
-  // 3. Hot clients without recent contact
-  var hotNoCall = clients.filter(function(c){
-    return c.temp === 'hot' && c.stage !== 'closed' && (!c.nextCall || c.nextCall < todayISO);
-  });
-  if (hotNoCall.length > 0) {
-    alerts.push('🔥 <strong>' + hotNoCall.length + (isEs ? ' calientes sin cita</strong>: ' : ' hot leads with no appointment</strong>: ') +
-      hotNoCall.slice(0,3).map(function(c){ return c.name; }).join(', '));
-  }
-
-  // 4. Monthly income progress (show at start of week)
-  if (now.getDay() === 1 && hour >= 8 && hour <= 10) {
-    var monthInc = incomeTxs.filter(function(t){
-      var d = new Date(t.date + 'T00:00:00');
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).reduce(function(s,t){ return s+(t.amount||0); }, 0);
-    if (monthInc > 0) {
-      alerts.push('💰 <strong>' + (isEs ? 'Este mes llevas: $' : 'This month so far: $') + monthInc.toLocaleString() + '</strong>');
-    }
-  }
-
-  if (alerts.length === 0) return;
-  _jvLastProactive = Date.now();
-
-  // Show proactive message
-  var greeting = isEs ? '👋 Jefe, aquí mi reporte:' : '👋 Boss, here's my report:';
-  var msg = '<strong>' + greeting + '</strong><br><br>' + alerts.join('<br><br>');
-  jvAddMsg('bot', msg, true);
-
-  // If Jarvis tab is not open, show notification badge
-  var jvTab = document.getElementById('tab-jarvis');
-  if (jvTab && !jvTab.classList.contains('active')) {
-    jvTab.style.position = 'relative';
-    var badge = jvTab.querySelector('.jv-notif') || document.createElement('span');
-    badge.className = 'jv-notif';
-    badge.textContent = alerts.length;
-    badge.style.cssText = 'position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;font-weight:800;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;';
-    if (!jvTab.querySelector('.jv-notif')) jvTab.appendChild(badge);
-  }
 }
 
 // ── Build command buttons ──
@@ -5632,22 +5546,9 @@ function jvSystemPrompt() {
     ? clients.slice(-5).map(function(c){ return c.name + ' (' + (c.stage||'lead') + ')'; }).join(', ')
     : 'ninguno';
 
-  // Build long-term memory context
-  var longMemStr = jvLongMem.length
-    ? jvLongMem.slice(-15).map(function(m){ return '• ' + m; }).join('\n')
-    : 'Sin memoria guardada aún.';
-
-  // Vencidos alert
-  var venc = (typeof clients !== 'undefined')
-    ? clients.filter(function(c){ return c.nextCall && c.nextCall < todayISO && c.stage !== 'closed'; })
-    : [];
-  var vencStr = venc.length
-    ? venc.slice(0,5).map(function(c){ return c.name + ' (vencido desde ' + c.nextCall + ')'; }).join(', ')
-    : 'ninguno';
-
   return [
-    'Eres Jarvis, el asistente de IA personal del CRM DLCR Real Estate & Loans.',
-    'IDIOMA ACTUAL: ' + (typeof lang !== 'undefined' ? (lang === 'es' ? 'ESPAÑOL' : 'ENGLISH') : 'ESPAÑOL') + '. Responde SIEMPRE en ese idioma.',
+    'Eres Jarvis, el asistente de IA del CRM DLCR Real Estate & Loans.',
+    'IDIOMA ACTUAL DE LA INTERFAZ: ' + (typeof lang !== "undefined" ? (lang === "es" ? "ESPAÑOL" : "ENGLISH") : "ESPAÑOL") + '. Responde siempre en ese mismo idioma.',
     'Hoy es: ' + today + '. Fecha ISO hoy: ' + todayISO + '. Próximo sábado ISO: ' + satISO,
     '',
     'ESTADO ACTUAL DEL CRM:',
@@ -5656,10 +5557,6 @@ function jvSystemPrompt() {
     '- Cierres: ' + closedClients,
     '- Ingresos totales registrados: $' + totalIncome.toLocaleString(),
     '- Últimos clientes: ' + recentNames,
-    '- Clientes vencidos (sin contactar): ' + vencStr,
-    '',
-    'MEMORIA DE LARGO PLAZO (recuerdas esto de sesiones anteriores):',
-    longMemStr,
     '',
     'Tu trabajo es interpretar el mensaje del usuario y responder SIEMPRE con un JSON válido.',
     'El JSON debe tener exactamente esta estructura:',
@@ -5706,14 +5603,6 @@ function jvSystemPrompt() {
     '',
     '9. chat_reply — respuesta conversacional (cuando NO hay acción de CRM)',
     '   params: { message: "tu respuesta" }',
-    '',
-    '23. memory_save — guardar algo importante en mi memoria permanente',
-    '    params: { fact: "hecho importante a recordar" }',
-    '    USAR CUANDO: usuario dice "recuerda que...", "guarda que...", "no olvides que..."',
-    '',
-    '24. memory_clear — borrar toda la memoria',
-    '    params: {}',
-    '    USAR CUANDO: usuario dice "olvida todo", "borra tu memoria"',
     '',
     '10. crm_delete_client — eliminar cliente del CRM',
     '    params: clientName(requerido)',
@@ -5775,24 +5664,15 @@ async function jvSend(override) {
   jvAddMsg('user', msg);
   jvShowTyping();
 
-  // Add to conversation history (Level 1)
-  jvHistory.push({ role: 'user', content: msg });
-  if (jvHistory.length > JV_MAX_HISTORY) jvHistory = jvHistory.slice(-JV_MAX_HISTORY);
-
-  // Auto-extract important facts for long memory (Level 2)
-  jvAutoLearn(msg);
-
+  // Try to call Jarvis server for NLP interpretation
   try {
     var sysprompt = jvSystemPrompt();
-    // Build messages array with history for context
-    var historyMsgs = jvHistory.slice(-10).slice(0,-1); // last 10 except current
     var r = await fetch('/api/jarvis/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message:  msg,
-        system:   sysprompt,
-        history:  historyMsgs,
+        message: msg,
+        system:  sysprompt,
       }),
       signal: AbortSignal.timeout(30000),
     });
@@ -5803,58 +5683,16 @@ async function jvSend(override) {
     var parsed = jvParseResponse(raw);
 
     if (parsed) {
-      // Save bot reply to history
-      jvHistory.push({ role: 'assistant', content: parsed.reply || raw });
-      if (jvHistory.length > JV_MAX_HISTORY) jvHistory = jvHistory.slice(-JV_MAX_HISTORY);
       await jvExecuteAction(parsed, msg);
     } else {
-      jvHistory.push({ role: 'assistant', content: raw });
+      // Fallback: try local server
       await jvFallbackServer(msg);
     }
   } catch(e) {
+    // Fallback to local server
     jvHideTyping();
     await jvFallbackServer(msg);
   }
-}
-
-// ── Level 2: Auto-learn from conversations ──
-function jvAutoLearn(msg) {
-  var lower = msg.toLowerCase();
-  var facts = [];
-  // Learn client preferences
-  if (lower.includes('prefiere') || lower.includes('le gusta') || lower.includes('quiere')) facts.push('Usuario mencionó: ' + msg.substring(0,80));
-  // Learn business info
-  if (lower.includes('mi comisión') || lower.includes('mi porcentaje') || lower.includes('mi split')) facts.push('Info de negocio: ' + msg.substring(0,80));
-  // Learn important names
-  if (lower.includes('mi socio') || lower.includes('mi broker') || lower.includes('mi jefe')) facts.push('Contacto clave: ' + msg.substring(0,80));
-  facts.forEach(function(f) {
-    if (!jvLongMem.find(function(m){ return m === f; })) {
-      jvLongMem.push(f);
-      jvSaveLongMem();
-    }
-  });
-}
-
-// ── Level 2: Save/load long-term memory ──
-async function jvSaveLongMem() {
-  try {
-    await fetch('/api/memory/clear', { method: 'POST' });
-    for (var i = 0; i < jvLongMem.length; i++) {
-      await fetch('/api/memory/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fact: jvLongMem[i] })
-      });
-    }
-  } catch(e) {}
-}
-
-async function jvLoadLongMem() {
-  try {
-    var r = await fetch('/api/memory');
-    var d = await r.json();
-    jvLongMem = d.facts || [];
-  } catch(e) { jvLongMem = []; }
 }
 
 // ── Fallback to local Jarvis server ──
@@ -6002,26 +5840,6 @@ async function jvExecuteAction(cmd, originalMsg) {
 
     case 'crm_search':
       jvDoSearch(params);
-      break;
-
-    case 'memory_save':
-      if (params.fact) {
-        jvLongMem.push(params.fact);
-        jvSaveLongMem();
-        // Also add to visible memory chips
-        jvMems.push(params.fact);
-        jvRenderMem();
-        jvAddMsg('bot', '🧠 ' + (lang==='es' ? 'Guardado en mi memoria: ' : 'Saved to memory: ') + '<em>' + params.fact + '</em>');
-      }
-      break;
-
-    case 'memory_clear':
-      jvLongMem = [];
-      jvMems = [];
-      jvSaveLongMem();
-      fetch('/api/memory/clear', { method: 'POST' }).catch(function(){});
-      jvRenderMem();
-      jvAddMsg('bot', '🧹 ' + (lang==='es' ? 'Memoria borrada.' : 'Memory cleared.'));
       break;
 
     default:
