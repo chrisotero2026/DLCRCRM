@@ -2640,44 +2640,77 @@ function openShareClientModal(clientId) {
   var sharedWith = c.sharedWith || [];
   var sharedNames = c.sharedWithNames || {};
 
-  // Build available agents to share with
   var available = _teamMembers.filter(function(m) {
     return m.uid !== _fbUserId && sharedWith.indexOf(m.uid) === -1;
   });
-  var currentShares = sharedWith.map(function(uid) {
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-bottom:5px">'
-      + '<span style="font-size:13px;color:#22c55e">✅ ' + (sharedNames[uid] || uid) + '</span>'
-      + '<button onclick="unshareClient('+clientId+',''+uid+'');closeShareModal()" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕ Quitar</button>'
-      + '</div>';
-  }).join('');
-
-  var addList = available.length > 0
-    ? available.map(function(m) {
-        return '<button onclick="shareClientWith('+clientId+',''+m.uid+'',''+m.name+'');closeShareModal()" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px">'
-          + '<span style="font-size:14px">' + ({'owner':'👑','manager':'🏆','supervisor':'⭐','agent':'👤'}[m.role]||'👤') + '</span>'
-          + '<div><div style="font-weight:700">' + (m.name||m.email||m.uid) + '</div>'
-          + '<div style="font-size:11px;color:var(--muted)">' + (m.role||'agent') + '</div></div></button>';
-      }).join('')
-    : '<p style="color:var(--muted);font-size:13px;text-align:center">No hay más usuarios disponibles</p>';
-
-  var html = '<div style="padding:20px">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
-    + '<h3 style="margin:0;font-size:16px">🔗 Compartir: ' + c.name + '</h3>'
-    + '<button onclick="closeShareModal()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer">✕</button>'
-    + '</div>'
-    + (currentShares ? '<div style="margin-bottom:14px"><p style="font-size:12px;color:var(--muted);margin:0 0 6px">Compartido con:</p>' + currentShares + '</div>' : '')
-    + '<p style="font-size:12px;color:var(--muted);margin:0 0 8px">Compartir con:</p>'
-    + addList
-    + '</div>';
 
   var overlay = document.createElement('div');
   overlay.id = 'shareClientOverlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center';
-  var box = document.createElement('div');
-  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto';
-  box.innerHTML = html;
-  overlay.appendChild(box);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeShareModal(); });
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto;padding:20px';
+
+  // Header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px';
+  hdr.innerHTML = '<h3 style="margin:0;font-size:16px">🔗 Compartir: ' + c.name + '</h3>';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer';
+  closeBtn.onclick = closeShareModal;
+  hdr.appendChild(closeBtn);
+  box.appendChild(hdr);
+
+  // Current shares
+  if (sharedWith.length > 0) {
+    var lbl = document.createElement('p');
+    lbl.style.cssText = 'font-size:12px;color:var(--muted);margin:0 0 6px';
+    lbl.textContent = 'Compartido con:';
+    box.appendChild(lbl);
+    sharedWith.forEach(function(uid) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-bottom:5px';
+      var nm = document.createElement('span');
+      nm.style.cssText = 'font-size:13px;color:#22c55e';
+      nm.textContent = '✅ ' + (sharedNames[uid] || uid);
+      var rmBtn = document.createElement('button');
+      rmBtn.textContent = '✕ Quitar';
+      rmBtn.style.cssText = 'background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer';
+      rmBtn.addEventListener('click', (function(u){ return function(){ unshareClient(clientId, u); closeShareModal(); }; })(uid));
+      row.appendChild(nm); row.appendChild(rmBtn);
+      box.appendChild(row);
+    });
+  }
+
+  // Add share list
+  var addLbl = document.createElement('p');
+  addLbl.style.cssText = 'font-size:12px;color:var(--muted);margin:8px 0';
+  addLbl.textContent = 'Compartir con:';
+  box.appendChild(addLbl);
+
+  if (available.length === 0) {
+    var noOne = document.createElement('p');
+    noOne.style.cssText = 'color:var(--muted);font-size:13px;text-align:center';
+    noOne.textContent = 'No hay más usuarios disponibles';
+    box.appendChild(noOne);
+  } else {
+    available.forEach(function(m) {
+      var mName = m.name || m.email || m.uid;
+      var mRole = m.role || 'agent';
+      var icons = {owner:'👑',manager:'🏆',supervisor:'⭐',agent:'👤'};
+      var btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px';
+      btn.innerHTML = '<span style="font-size:14px">' + (icons[mRole]||'👤') + '</span>'
+        + '<div><div style="font-weight:700">' + mName + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + mRole + '</div></div>';
+      btn.addEventListener('click', (function(uid, name){ return function(){ shareClientWith(clientId, uid, name); closeShareModal(); }; })(m.uid, mName));
+      box.appendChild(btn);
+    });
+  }
+
+  overlay.appendChild(box);
   document.body.appendChild(overlay);
 }
 
@@ -2693,31 +2726,57 @@ var _viewingAgent = null; // { uid, name } when owner is viewing an agent's fold
 function openTransferClientModal(clientId) {
   var c = clients.find(function(x) { return x.id === clientId; });
   if (!c) return;
-  var available = _teamMembers.filter(function(m) { return m.uid !== c.ownedBy; });
-  var listHtml = available.length > 0
-    ? available.map(function(m) {
-        return '<button onclick="transferClient('+clientId+',''+m.uid+'',''+m.name+'')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px">'
-          + '<span>'+({'owner':'👑','manager':'🏆','supervisor':'⭐','agent':'👤'}[m.role]||'👤')+'</span>'
-          + '<div><div style="font-weight:700">'+(m.name||m.email||m.uid)+'</div><div style="font-size:11px;color:var(--muted)">'+(m.role||'agent')+'</div></div></button>';
-      }).join('')
-    : '<p style="color:var(--muted);font-size:13px;text-align:center">No hay otros usuarios</p>';
-
-  var html = '<div style="padding:20px">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
-    + '<h3 style="margin:0;font-size:16px">↗️ Transferir: '+c.name+'</h3>'
-    + '<button onclick="closeShareModal()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
-    + '<p style="font-size:12px;color:var(--muted);margin:0 0 10px">Propietario actual: <strong>'+(c.ownedByName||c.ownedBy||'Owner')+'</strong></p>'
-    + '<p style="font-size:12px;color:var(--muted);margin:0 0 8px">Transferir a:</p>'
-    + listHtml + '</div>';
+  var available = _teamMembers.filter(function(m) { return m.uid !== (c.ownedBy || _fbUserId); });
 
   var overlay = document.createElement('div');
   overlay.id = 'shareClientOverlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center';
-  var box = document.createElement('div');
-  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto';
-  box.innerHTML = html;
-  overlay.appendChild(box);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeShareModal(); });
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto;padding:20px';
+
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px';
+  hdr.innerHTML = '<h3 style="margin:0;font-size:16px">↗️ Transferir: ' + c.name + '</h3>';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer';
+  closeBtn.onclick = closeShareModal;
+  hdr.appendChild(closeBtn);
+  box.appendChild(hdr);
+
+  var info = document.createElement('p');
+  info.style.cssText = 'font-size:12px;color:var(--muted);margin:0 0 10px';
+  info.innerHTML = 'Propietario actual: <strong>' + (c.ownedByName || c.ownedBy || 'Owner') + '</strong>';
+  box.appendChild(info);
+
+  var lbl = document.createElement('p');
+  lbl.style.cssText = 'font-size:12px;color:var(--muted);margin:0 0 8px';
+  lbl.textContent = 'Transferir a:';
+  box.appendChild(lbl);
+
+  if (available.length === 0) {
+    var noOne = document.createElement('p');
+    noOne.style.cssText = 'color:var(--muted);font-size:13px;text-align:center';
+    noOne.textContent = 'No hay otros usuarios';
+    box.appendChild(noOne);
+  } else {
+    available.forEach(function(m) {
+      var mName = m.name || m.email || m.uid;
+      var mRole = m.role || 'agent';
+      var icons = {owner:'👑',manager:'🏆',supervisor:'⭐',agent:'👤'};
+      var btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px';
+      btn.innerHTML = '<span>' + (icons[mRole]||'👤') + '</span>'
+        + '<div><div style="font-weight:700">' + mName + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + mRole + '</div></div>';
+      btn.addEventListener('click', (function(uid, name){ return function(){ transferClient(clientId, uid, name); }; })(m.uid, mName));
+      box.appendChild(btn);
+    });
+  }
+
+  overlay.appendChild(box);
   document.body.appendChild(overlay);
 }
 
