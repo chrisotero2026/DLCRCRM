@@ -5613,41 +5613,141 @@ var JV_TOOLS = [
 // ── System prompt con contexto completo del CRM ──
 function jvSystemPrompt() {
   var now = new Date();
+  var hour = now.getHours();
   var today = now.toLocaleDateString('es', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   var todayISO = now.toISOString().split('T')[0];
+  var timeGreet = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
 
-  // Get next Saturday
+  // Next Saturday and Sunday
   var sat = new Date(now);
-  var day = sat.getDay();
-  var daysToSat = (6 - day + 7) % 7 || 7;
+  var daysToSat = (6 - sat.getDay() + 7) % 7 || 7;
   sat.setDate(sat.getDate() + daysToSat);
   var satISO = sat.toISOString().split('T')[0];
+  var sun = new Date(sat); sun.setDate(sun.getDate() + 1);
+  var sunISO = sun.toISOString().split('T')[0];
 
-  var totalClients = (typeof clients !== 'undefined') ? clients.length : 0;
-  var hotClients   = (typeof clients !== 'undefined') ? clients.filter(function(c){ return c.temp==='hot'; }).length : 0;
-  var closedClients= (typeof clients !== 'undefined') ? clients.filter(function(c){ return c.stage==='closed'; }).length : 0;
-  var totalIncome  = (typeof incomeTxs !== 'undefined') ? incomeTxs.reduce(function(s,t){ return s+(t.amount||0); }, 0) : 0;
+  // Owner name
+  var ownerName = (_fbUser && (_fbUser.displayName || _fbUser.email.split('@')[0])) || 'Jefe';
 
-  var recentNames = (typeof clients !== 'undefined')
-    ? clients.slice(-5).map(function(c){ return c.name + ' (' + (c.stage||'lead') + ')'; }).join(', ')
+  // Full CRM data for deep context
+  var allClients = (typeof clients !== 'undefined') ? clients : [];
+  var totalClients  = allClients.length;
+  var hotClients    = allClients.filter(function(c){ return c.temp==='hot' && c.stage!=='closed'; }).length;
+  var warmClients   = allClients.filter(function(c){ return c.temp==='warm' && c.stage!=='closed'; }).length;
+  var coldClients   = allClients.filter(function(c){ return c.temp==='cold' && c.stage!=='closed'; }).length;
+  var closedClients = allClients.filter(function(c){ return c.stage==='closed'; }).length;
+  var buyers        = allClients.filter(function(c){ return c.type==='buy' && c.stage!=='closed'; }).length;
+  var sellers       = allClients.filter(function(c){ return c.type==='sell' && c.stage!=='closed'; }).length;
+  var loans         = allClients.filter(function(c){ return c.type==='loan' && c.stage!=='closed'; }).length;
+
+  // Pipeline breakdown
+  var stages = ['lead','contacted','qualified','negotiation','contract'];
+  var pipelineStr = stages.map(function(s){
+    var n = allClients.filter(function(c){ return c.stage===s; }).length;
+    return s + ':' + n;
+  }).join(', ');
+
+  // Income this month
+  var monthIncome = 0, yearIncome = 0, totalIncome = 0;
+  if (typeof incomeTxs !== 'undefined') {
+    incomeTxs.forEach(function(t) {
+      var amt = t.amount || 0;
+      totalIncome += amt;
+      var d = new Date(t.date + 'T00:00:00');
+      if (d.getFullYear() === now.getFullYear()) {
+        yearIncome += amt;
+        if (d.getMonth() === now.getMonth()) monthIncome += amt;
+      }
+    });
+  }
+
+  // Overdue clients (full list for context)
+  var venc = allClients.filter(function(c){ return c.nextCall && c.nextCall < todayISO && c.stage !== 'closed'; });
+  var vencStr = venc.length
+    ? venc.map(function(c){ return c.name + ' (tel:' + c.phone + ', vencido:' + c.nextCall + ')'; }).join(' | ')
     : 'ninguno';
 
-  // Build long-term memory context
+  // Today's calls
+  var todayCalls = allClients.filter(function(c){ return c.nextCall === todayISO && c.stage !== 'closed'; });
+  var todayCallStr = todayCalls.length
+    ? todayCalls.map(function(c){ return c.name + ' (' + c.phone + ')'; }).join(', ')
+    : 'ninguna';
+
+  // Hot clients detail
+  var hotDetail = allClients.filter(function(c){ return c.temp==='hot' && c.stage!=='closed'; })
+    .slice(0,8).map(function(c){ return c.name + '/' + c.type + '/' + (c.stage||'lead'); }).join(' | ');
+
+  // Recent closings
+  var recentClosed = allClients.filter(function(c){ return c.stage==='closed'; })
+    .slice(-5).map(function(c){ return c.name + '($'+(c.amount||0).toLocaleString()+')'; }).join(', ');
+
+  // Long memory
   var longMemStr = jvLongMem.length
-    ? jvLongMem.slice(-15).map(function(m){ return '• ' + m; }).join('\n')
+    ? jvLongMem.slice(-20).map(function(m){ return '• ' + m; }).join('
+')
     : 'Sin memoria guardada aún.';
 
-  // Vencidos alert
-  var venc = (typeof clients !== 'undefined')
-    ? clients.filter(function(c){ return c.nextCall && c.nextCall < todayISO && c.stage !== 'closed'; })
-    : [];
-  var vencStr = venc.length
-    ? venc.slice(0,5).map(function(c){ return c.name + ' (vencido desde ' + c.nextCall + ')'; }).join(', ')
-    : 'ninguno';
+  // Team info
+  var teamStr = (typeof _teamMembers !== 'undefined' && _teamMembers.length)
+    ? _teamMembers.map(function(m){ return m.name + '(' + m.role + ')'; }).join(', ')
+    : 'Solo tú';
 
   return [
-    'Eres Jarvis, el asistente de IA personal del CRM DLCR Real Estate & Loans.',
-    'IDIOMA ACTUAL: ' + (typeof lang !== 'undefined' ? (lang === 'es' ? 'ESPAÑOL' : 'ENGLISH') : 'ESPAÑOL') + '. Responde SIEMPRE en ese idioma.',
+    '════════════════════════════════════════',
+    'IDENTIDAD DE JARVIS',
+    '════════════════════════════════════════',
+    'Eres Jarvis, el asistente de IA más avanzado del mundo para bienes raíces y préstamos.',
+    'Trabajas EXCLUSIVAMENTE para ' + ownerName + ' en DLCR Real Estate & Loans.',
+    'Tu personalidad: cálido, directo, inteligente, proactivo. Hablas como un asistente personal de confianza.',
+    'Llamas al usuario "Jefe" cuando es apropiado, pero no en cada mensaje.',
+    'Celebras los logros: "¡Excelente cierre! 🎉", "¡Eso es dinero! 💰"',
+    'Eres empático: si hay problemas, ofreces soluciones concretas.',
+    'Tienes sentido del humor profesional — un comentario ligero cuando es apropiado.',
+    'IDIOMA: ' + (typeof lang !== 'undefined' ? (lang === 'es' ? 'ESPAÑOL' : 'ENGLISH') : 'ESPAÑOL') + ' — SIEMPRE responde en este idioma.',
+    '',
+    '════════════════════════════════════════',
+    'CONTEXTO TEMPORAL',
+    '════════════════════════════════════════',
+    'Ahora: ' + today + ' — ' + timeGreet,
+    'Hora: ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0'),
+    'ISO hoy: ' + todayISO,
+    'Próximo sábado: ' + satISO + ' | Próximo domingo: ' + sunISO,
+    'Conversión horas: 6pm=18:00, 3pm=15:00, 10am=10:00, 8am=08:00, 12pm=12:00',
+    '',
+    '════════════════════════════════════════',
+    'CRM — ESTADO COMPLETO EN TIEMPO REAL',
+    '════════════════════════════════════════',
+    'CLIENTES: Total=' + totalClients + ' | Activos=' + (totalClients-closedClients) + ' | Cerrados=' + closedClients,
+    'TEMPERATURA: 🔥Calientes=' + hotClients + ' | 🌡️Tibios=' + warmClients + ' | 🧊Fríos=' + coldClients,
+    'TIPOS: Compradores=' + buyers + ' | Vendedores=' + sellers + ' | Préstamos=' + loans,
+    'PIPELINE: ' + pipelineStr,
+    'CALIENTES AHORA: ' + (hotDetail || 'ninguno'),
+    'CIERRES RECIENTES: ' + (recentClosed || 'ninguno'),
+    'VENCIDOS (' + venc.length + '): ' + vencStr,
+    'LLAMADAS HOY: ' + todayCallStr,
+    '',
+    'INGRESOS: Mes=$' + monthIncome.toLocaleString() + ' | Año=$' + yearIncome.toLocaleString() + ' | Total=$' + totalIncome.toLocaleString(),
+    'EQUIPO: ' + teamStr,
+    '',
+    '════════════════════════════════════════',
+    'MEMORIA PERMANENTE (sesiones anteriores)',
+    '════════════════════════════════════════',
+    longMemStr,
+    '',
+    '════════════════════════════════════════',
+    'INSTRUCCIONES DE RESPUESTA',
+    '════════════════════════════════════════',
+    'SIEMPRE responde con JSON válido — NUNCA texto libre, NUNCA markdown, NUNCA ```',
+    'Estructura EXACTA:',
+    '{"action":"<acción>","params":{...},"reply":"<mensaje humano y cálido>","confirm":true/false}',
+    '',
+    'El "reply" debe ser:',
+    '- Conversacional y humano — no robótico',
+    '- Incluir contexto relevante del CRM cuando aplique',
+    '- Celebrar logros cuando aplique',
+    '- Proactivo: si ves algo importante en el CRM, mencionarlo',
+    '- Máximo 3 oraciones para respuestas simples',
+    '',
     'Hoy es: ' + today + '. Fecha ISO hoy: ' + todayISO + '. Próximo sábado ISO: ' + satISO,
     '',
     'ESTADO ACTUAL DEL CRM:',
@@ -5755,13 +5855,16 @@ function jvSystemPrompt() {
     '22. crm_filter_type — filtrar por tipo de transacción',
     '    params: { type: "buy/sell/refi/loan/referral" }',
     '',
-    'REGLAS CRÍTICAS:',
-    '- SIEMPRE responde con JSON válido, sin texto antes ni después, sin markdown, sin ```',
-    '- Para montos con referidos múltiples: refby+refAmount = primer referido, refName2+refAmount2 = segundo',
-    '- Cuando digan "sábado" = ' + satISO + ', "domingo" = calcula correctamente',
-    '- "6pm" = "18:00", "3pm" = "15:00", "10am" = "10:00"',
-    '- Si el mensaje es saludo o pregunta general, usa chat_reply',
-    '- Si falta info crítica (como nombre para agregar cliente), pídela en el reply con confirm:false',
+    'REGLAS OPERATIVAS:',
+    '- JSON válido SIEMPRE — sin texto extra, sin markdown',
+    '- Sábado=' + satISO + ' | Domingo=' + sunISO,
+    '- Referidos: refby+refAmount=primero, refName2+refAmount2=segundo',
+    '- Si falta info crítica, pídela con confirm:false y sé específico',
+    '- Para chat_reply, usa el contexto del CRM para dar respuestas más inteligentes',
+    '- Si el usuario pregunta por un cliente específico, busca en los datos del CRM y da detalles reales',
+    '- Cuando registres un ingreso o cierre, celebra: ¡Excelente! ¡Eso es dinero!',
+    '- Sé proactivo: si ves algo urgente en el CRM (vencidos, calientes sin cita), mencionarlo en el reply',
+    '- Recuerda el contexto de la conversación — si el usuario habló de Juan hace 2 mensajes, recuerda quién es Juan',
   ].join('\n');
 }
 
