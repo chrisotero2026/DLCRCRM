@@ -2737,6 +2737,51 @@ function parseCSVLine(line) {
   return result;
 }
 
+function detectCSVFormat(headers) {
+  // Detect Microsoft Outlook/Google Contacts format
+  var h = headers.join(',').toLowerCase();
+  if (h.indexOf('given name') !== -1 || h.indexOf('e-mail 1') !== -1 || h.indexOf('phone 1') !== -1) return 'outlook';
+  if (h.indexOf('first name') !== -1 || h.indexOf('e-mail address') !== -1) return 'google';
+  return 'dlcr'; // our own format
+}
+
+function findColIndex(headers, keywords) {
+  for (var k = 0; k < keywords.length; k++) {
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i].toLowerCase().trim().indexOf(keywords[k].toLowerCase()) !== -1) return i;
+    }
+  }
+  return -1;
+}
+
+function extractPhone(cols, headers) {
+  // Try multiple phone column names
+  var phoneKeywords = ['phone 1 - value','mobile','phone','móvil','celular','cell','tel'];
+  var idx = findColIndex(headers, phoneKeywords);
+  if (idx !== -1 && cols[idx]) return cols[idx].replace(/[^\d+\-\s\(\)]/g,'').trim();
+  // Also check columns after "Phone 1 - Type"
+  for (var i = 0; i < headers.length; i++) {
+    var h = headers[i].toLowerCase().trim();
+    if ((h.indexOf('phone') !== -1 || h.indexOf('mobile') !== -1) && h.indexOf('type') === -1) {
+      if (cols[i] && cols[i].trim()) return cols[i].replace(/[^\d+\-\s\(\)]/g,'').trim();
+    }
+  }
+  return '';
+}
+
+function extractEmail(cols, headers) {
+  var emailKeywords = ['e-mail 1 - value','email address','e-mail','email'];
+  var idx = findColIndex(headers, emailKeywords);
+  if (idx !== -1 && cols[idx]) return cols[idx].trim();
+  for (var i = 0; i < headers.length; i++) {
+    var h = headers[i].toLowerCase().trim();
+    if (h.indexOf('e-mail') !== -1 && h.indexOf('type') === -1) {
+      if (cols[i] && cols[i].trim()) return cols[i].trim();
+    }
+  }
+  return '';
+}
+
 function importCSV(event) {
   if(!canExport()){showToast('❌ Sin permiso');return;}
   var file = event.target.files[0];
@@ -2748,59 +2793,91 @@ function importCSV(event) {
       var lines = text.split('\n').filter(function(l){ return l.trim(); });
       if (lines.length < 2) { showToast('❌ CSV vacío o sin datos'); return; }
 
-      var typeMap = {
-        'compra':'buy','purchase':'buy','buy':'buy',
-        'venta':'sell','sell':'sell',
-        'refinance':'refi','refi':'refi',
-        'préstamo':'loan','prestamo':'loan','loan':'loan',
-        'referido':'referral','referral':'referral',
-        'venta/compra':'buysell','buysell':'buysell'
-      };
-      var tempMap = {
-        'caliente':'hot','hot':'hot',
-        'tibio':'warm','warm':'warm','tibia':'warm',
-        'frío':'cold','frio':'cold','cold':'cold'
-      };
-      var stageMap = {
-        'lead':'lead','contactado':'contacted','contacted':'contacted',
-        'calificado':'qualified','qualified':'qualified',
-        'negociación':'negotiation','negociacion':'negotiation','negotiation':'negotiation',
-        'bajo contrato':'contract','contract':'contract',
-        'cerrado':'closed','closed':'closed'
-      };
+      var headers = parseCSVLine(lines[0]);
+      var format  = detectCSVFormat(headers);
+
+      var typeMap  = {'compra':'buy','purchase':'buy','buy':'buy','venta':'sell','sell':'sell','refinance':'refi','refi':'refi','préstamo':'loan','prestamo':'loan','loan':'loan','referido':'referral','referral':'referral','venta/compra':'buysell','buysell':'buysell'};
+      var tempMap  = {'caliente':'hot','hot':'hot','tibio':'warm','warm':'warm','tibia':'warm','frío':'cold','frio':'cold','cold':'cold'};
+      var stageMap = {'lead':'lead','contactado':'contacted','contacted':'contacted','calificado':'qualified','qualified':'qualified','negociación':'negotiation','negociacion':'negotiation','negotiation':'negotiation','bajo contrato':'contract','contract':'contract','cerrado':'closed','closed':'closed'};
 
       var imported = 0, skipped = 0, errors = 0;
+
       for (var i = 1; i < lines.length; i++) {
         try {
           var cols = parseCSVLine(lines[i]);
-          if (!cols[0] && !cols[1]) continue;
+          if (cols.every(function(c){ return !c.trim(); })) continue;
 
-          // Clean phone — remove all non-numeric except +
-          var rawPhone = (cols[1] || '').replace(/[^\d+\-\s\(\)]/g, '').trim();
+          var name = '', phone = '', email = '', address = '', notes = '';
+
+          if (format === 'outlook') {
+            // Microsoft Outlook format
+            // Name is col 0, Given Name col 1, Family Name col 3
+            var givenIdx  = findColIndex(headers, ['given name']);
+            var familyIdx = findColIndex(headers, ['family name']);
+            var nameIdx   = findColIndex(headers, ['name']);
+            var notesIdx  = findColIndex(headers, ['notes']);
+            var addrIdx   = findColIndex(headers, ['address 1 - street','street','address']);
+
+            // Build name
+            var given  = (givenIdx  !== -1 ? cols[givenIdx]  : '') || '';
+            var family = (familyIdx !== -1 ? cols[familyIdx] : '') || '';
+            name = (given + ' ' + family).trim();
+            if (!name && nameIdx !== -1) name = (cols[nameIdx] || '').trim();
+            if (!name) name = (cols[0] || '').trim();
+
+            phone   = extractPhone(cols, headers);
+            email   = extractEmail(cols, headers);
+            if (addrIdx !== -1) address = (cols[addrIdx] || '').trim();
+            if (notesIdx !== -1) notes = (cols[notesIdx] || '').trim();
+
+          } else if (format === 'google') {
+            // Google Contacts format
+            var fnIdx = findColIndex(headers, ['first name','given name']);
+            var lnIdx = findColIndex(headers, ['last name','family name','surname']);
+            var fn = fnIdx !== -1 ? (cols[fnIdx]||'').trim() : '';
+            var ln = lnIdx !== -1 ? (cols[lnIdx]||'').trim() : '';
+            name    = (fn + ' ' + ln).trim() || (cols[0]||'').trim();
+            phone   = extractPhone(cols, headers);
+            email   = extractEmail(cols, headers);
+            var notesIdx2 = findColIndex(headers, ['notes','note']);
+            if (notesIdx2 !== -1) notes = (cols[notesIdx2]||'').trim();
+
+          } else {
+            // DLCR format
+            name    = (cols[0] || '').trim();
+            phone   = (cols[1] || '').replace(/[^\d+\-\s\(\)]/g,'').trim();
+            email   = (cols[2] || '').trim();
+            address = (cols[3] || '').trim();
+            notes   = (cols[11] || '').trim();
+          }
+
+          if (!name) { errors++; continue; }
+
+          // Clean phone
+          phone = phone.replace(/[^\d+\-\s\(\)x]/g,'').trim();
 
           var c = {
-            id:        Date.now() + i + Math.random(),
+            id:        Date.now() + i + Math.floor(Math.random()*1000),
             created:   Date.now(),
-            name:      cols[0] || '',
-            phone:     rawPhone,
-            email:     cols[2] || '',
-            address:   cols[3] || '',
-            type:      typeMap[(cols[4]||'').toLowerCase().trim()] || 'buy',
-            temp:      tempMap[(cols[5]||'').toLowerCase().trim()] || 'warm',
-            stage:     stageMap[(cols[6]||'').toLowerCase().trim()] || 'lead',
-            rate:      parseFloat((cols[7]||'').replace(/[^\d.]/g,'')) || 0,
-            amount:    parseFloat((cols[8]||'').replace(/[^\d.]/g,'')) || 0,
-            nextCall:  cols[9]  || '',
-            closeDate: cols[10] || '',
-            notes:     cols[11] || ''
+            name:      name,
+            phone:     phone,
+            email:     email,
+            address:   address,
+            notes:     notes,
+            type:      format === 'dlcr' ? (typeMap[(cols[4]||'').toLowerCase().trim()] || 'buy') : 'buy',
+            temp:      format === 'dlcr' ? (tempMap[(cols[5]||'').toLowerCase().trim()] || 'warm') : 'warm',
+            stage:     format === 'dlcr' ? (stageMap[(cols[6]||'').toLowerCase().trim()] || 'lead') : 'lead',
+            rate:      format === 'dlcr' ? (parseFloat((cols[7]||'').replace(/[^\d.]/g,''))||0) : 0,
+            amount:    format === 'dlcr' ? (parseFloat((cols[8]||'').replace(/[^\d.]/g,''))||0) : 0,
+            nextCall:  format === 'dlcr' ? (cols[9]||'')  : '',
+            closeDate: format === 'dlcr' ? (cols[10]||'') : ''
           };
 
-          if (!c.name) { errors++; continue; }
-
-          // Skip duplicates (same name + phone)
+          // Skip duplicates
           var isDup = clients.find(function(x){
-            return x.name.toLowerCase() === c.name.toLowerCase() &&
-                   x.phone.replace(/\D/g,'') === c.phone.replace(/\D/g,'');
+            var samePhone = phone && x.phone && x.phone.replace(/\D/g,'') === phone.replace(/\D/g,'') && phone.replace(/\D/g,'').length > 6;
+            var sameName  = x.name.toLowerCase().trim() === name.toLowerCase().trim();
+            return sameName || samePhone;
           });
           if (isDup) { skipped++; continue; }
 
@@ -2810,13 +2887,15 @@ function importCSV(event) {
       }
 
       saveAll(); renderAll();
-      var msg = '✅ ' + imported + (lang==='es'?' clientes importados':' clients imported');
-      if (skipped) msg += ' · ' + skipped + (lang==='es'?' duplicados omitidos':' duplicates skipped');
-      if (errors)  msg += ' · ' + errors + (lang==='es'?' errores':' errors');
+      var fmtLabel = format === 'outlook' ? ' (Outlook)' : format === 'google' ? ' (Google)' : ' (DLCR)';
+      var msg = '✅ ' + imported + ' importados' + fmtLabel;
+      if (skipped) msg += ' · ' + skipped + ' duplicados';
+      if (errors)  msg += ' · ' + errors + ' errores';
       showToast(msg);
 
     } catch(err) {
-      showToast('❌ Error al importar CSV: ' + err.message);
+      showToast('❌ Error: ' + err.message);
+      console.error(err);
     }
     event.target.value = '';
   };
