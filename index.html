@@ -1660,14 +1660,18 @@ function initFirebase() {
   }
 }
 
-// ── Owner: load ALL users' data merged ──
+// ── Owner: load ALL users' data merged (READ-ONLY merge, never writes) ──
 async function loadOwnerAllData(fb) {
   try {
-    // Load owner's own data first
+    // 1. Load owner's own data
     var ownerRef  = fb.doc(_fbDb, 'crm', _fbUserId);
     var ownerSnap = await fb.getDoc(ownerRef);
     var ownerData = ownerSnap.exists() ? ownerSnap.data() : {};
-    clients     = ownerData.clients     || [];
+    clients     = (ownerData.clients || []).map(function(c) {
+      // Tag owner's own clients with ownedBy if missing
+      if (!c.ownedBy) c.ownedBy = _fbUserId;
+      return c;
+    });
     callHistory = ownerData.callHistory || {};
     commHistory = ownerData.commHistory || [];
     incomeTxs   = ownerData.incomeTxs  || [];
@@ -1677,40 +1681,37 @@ async function loadOwnerAllData(fb) {
     if (ownerData.jarvisLogoD) jarvisLogoD = ownerData.jarvisLogoD;
     if (ownerData.theme) localStorage.setItem('dlcr_theme', ownerData.theme);
 
-    // Then load all agents' clients and merge
-    await loadTeamMembers();
+    // 2. Read each team member's bucket and append their clients
     for (var i = 0; i < _teamMembers.length; i++) {
       var member = _teamMembers[i];
-      if (member.uid === _fbUserId) continue; // skip self
+      if (member.uid === _fbUserId) continue;
       try {
         var mRef  = fb.doc(_fbDb, 'crm', member.uid);
         var mSnap = await fb.getDoc(mRef);
-        if (mSnap.exists()) {
-          var md = mSnap.data();
-          var mClients = (md.clients || []).map(function(c) {
-            // Ensure ownedBy is set for legacy clients
-            if (!c.ownedBy) {
-              c.ownedBy     = member.uid;
-              c.ownedByName = member.name || member.email || member.uid;
-            }
-            return c;
-          });
-          // Merge: avoid duplicates by id
-          mClients.forEach(function(mc) {
-            if (!clients.find(function(e) { return e.id === mc.id; })) {
-              clients.push(mc);
-            }
-          });
-          // Merge income
-          (md.incomeTxs || []).forEach(function(tx) {
-            if (!incomeTxs.find(function(e) { return e.id === tx.id; })) {
-              incomeTxs.push(tx);
-            }
-          });
-        }
+        if (!mSnap.exists()) continue;
+        var md = mSnap.data();
+        var mClients = (md.clients || []).map(function(c) {
+          if (!c.ownedBy) {
+            c.ownedBy     = member.uid;
+            c.ownedByName = member.name || member.email || member.uid;
+          }
+          return c;
+        });
+        // Append — avoid id duplicates
+        mClients.forEach(function(mc) {
+          if (!clients.some(function(e) { return e.id === mc.id; })) {
+            clients.push(mc);
+          }
+        });
+        // Merge income transactions
+        (md.incomeTxs || []).forEach(function(tx) {
+          if (!incomeTxs.some(function(e) { return e.id === tx.id; })) {
+            incomeTxs.push(tx);
+          }
+        });
       } catch(ex) { console.warn('loadOwnerAllData member', member.uid, ex); }
     }
-    try { localStorage.setItem('dlcr_v4', JSON.stringify({ clients:clients, callHistory:callHistory, commHistory:commHistory, incomeTxs:incomeTxs, fcTxs:fcTxs, logoD:logoD, jarvisLogoD:jarvisLogoD, myIncomeTxs:myIncomeTxs })); } catch(ex){}
+
     var dot = document.getElementById('savingDot');
     if (dot) { dot.className = 'saving-dot saved'; setTimeout(function(){ dot.className='saving-dot'; }, 1800); }
   } catch(ex) { console.warn('loadOwnerAllData failed:', ex); }
@@ -1871,44 +1872,24 @@ async function doSave() {
   if (_fbDb) {
     try {
       var fb = window._firebase;
-      if (isOwner()) {
-        // Owner: save own config to crm/main
-        var ownerData = { callHistory: callHistory, commHistory: commHistory,
-                          incomeTxs: incomeTxs, myIncomeTxs: myIncomeTxs, fcTxs: fcTxs,
-                          logoD: logoD, jarvisLogoD: jarvisLogoD, theme: currentTheme };
-        var ownerRef = fb.doc(_fbDb, 'crm', _fbUserId);
-        await fb.setDoc(ownerRef, ownerData, { merge: true });
-        // Owner clients that belong to owner: save to owner bucket
-        var ownerOwnClients = clients.filter(function(c) { return !c.ownedBy || c.ownedBy === _fbUserId; });
-        await fb.setDoc(ownerRef, { clients: ownerOwnClients }, { merge: true });
-        // Clients belonging to agents: group by ownedBy and save to each
-        var byAgent = {};
-        clients.forEach(function(c) {
-          if (c.ownedBy && c.ownedBy !== _fbUserId) {
-            if (!byAgent[c.ownedBy]) byAgent[c.ownedBy] = [];
-            byAgent[c.ownedBy].push(c);
-          }
-        });
-        for (var agentUid in byAgent) {
-          try {
-            var aRef  = fb.doc(_fbDb, 'crm', agentUid);
-            var aSnap = await fb.getDoc(aRef);
-            var aData = aSnap.exists() ? aSnap.data() : {};
-            var aClients = aData.clients || [];
-            byAgent[agentUid].forEach(function(c) {
-              var idx = aClients.findIndex(function(x) { return x.id === c.id; });
-              if (idx !== -1) aClients[idx] = c;
-              else aClients.push(c);
-            });
-            await fb.setDoc(aRef, { clients: aClients }, { merge: true });
-          } catch(ex) { console.warn('Owner save to agent', agentUid, ex); }
-        }
-      } else {
-        // Agent/Manager: save only their own visible clients
-        var myClients = clients.filter(function(c) { return !c.ownedBy || c.ownedBy === _fbUserId; });
-        var ref = fb.doc(_fbDb, 'crm', _fbUserId);
-        await fb.setDoc(ref, { ...data, clients: myClients });
-      }
+      // Every user (including owner) saves ONLY their own clients to crm/{uid}
+      // Owner sees everyone's clients merged in memory but only saves their own
+      var myOwnClients = clients.filter(function(c) {
+        return !c.ownedBy || c.ownedBy === _fbUserId;
+      });
+      var myData = {
+        clients:     myOwnClients,
+        callHistory: callHistory,
+        commHistory: commHistory,
+        incomeTxs:   incomeTxs,
+        myIncomeTxs: myIncomeTxs,
+        fcTxs:       fcTxs,
+        logoD:       logoD,
+        jarvisLogoD: jarvisLogoD,
+        theme:       currentTheme
+      };
+      var ref = fb.doc(_fbDb, 'crm', _fbUserId);
+      await fb.setDoc(ref, myData);
       if (dot) { dot.className = 'saving-dot saved'; setTimeout(function(){ if(dot) dot.className='saving-dot'; }, 1800); }
     } catch(ex) {
       console.warn('Firebase save failed:', ex);
@@ -2822,13 +2803,11 @@ function exitAgentView() {
 var _originalGetVisibleClients = getVisibleClients;
 getVisibleClients = function() {
   if (_viewingAgent) {
-    // Owner is viewing a specific agent's folder
     var agentUid = _viewingAgent.uid;
     return clients.filter(function(c) {
-      if (!c.ownedBy) return false; // hide legacy when viewing agent
-      if (c.ownedBy === agentUid) return true;
-      if (c.sharedWith && c.sharedWith.indexOf(agentUid) !== -1) return true;
-      return false;
+      if (!c.ownedBy) return false;
+      return c.ownedBy === agentUid
+          || (c.sharedWith && c.sharedWith.indexOf(agentUid) !== -1);
     });
   }
   return _originalGetVisibleClients();
@@ -2906,7 +2885,11 @@ function saveClient(){
     if(editC && !canEditClient(editC)) { showToast('❌ No tienes permiso para editar este cliente'); return; }
     Object.assign(editC,data);
   }
-  else clients.push({id:Date.now(),created:Date.now(),ownedBy:_fbUserId,ownedByName:(_fbUser&&_fbUser.displayName)||'Agente',...data});
+  else {
+    var newOwnedBy   = (_viewingAgent && isOwner()) ? _viewingAgent.uid : _fbUserId;
+    var newOwnedName = (_viewingAgent && isOwner()) ? _viewingAgent.name : ((_fbUser&&_fbUser.displayName)||(_fbUser&&_fbUser.email)||'Owner');
+    clients.push({id:Date.now(),created:Date.now(),ownedBy:newOwnedBy,ownedByName:newOwnedName,...data});
+  }
   saveAll(); closeModal(); renderAll(); showToast(tr('saved'));
   if(editId) openDetail(editId);
 }
@@ -4063,33 +4046,30 @@ function canDo(action) {
 
 // ── Filter clients based on role ──
 function getVisibleClients() {
+  // Owner sees everyone's clients (loaded merged in loadOwnerAllData)
   if (isOwner()) return clients;
   if (!_userProfile) return [];
-  var role = _userProfile.role;
+  var role   = _userProfile.role;
+  var myUid  = _fbUserId;
 
   if (role === 'manager' || role === 'supervisor') {
-    // Manager sees: own clients + all agents under them
-    var myUid = _fbUserId;
+    // Manager sees own + direct reports
     var teamUids = _teamMembers
       .filter(function(m) { return m.managerId === myUid; })
       .map(function(m) { return m.uid; });
     teamUids.push(myUid);
     return clients.filter(function(c) {
-      // own client OR shared with me OR team member's client
-      if (c.ownedBy && teamUids.indexOf(c.ownedBy) !== -1) return true;
-      if (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1) return true;
-      if (!c.ownedBy) return true; // legacy clients (no ownedBy)
-      return false;
+      if (!c.ownedBy) return c.ownedBy === undefined; // legacy: only show if truly unowned
+      return teamUids.indexOf(c.ownedBy) !== -1
+          || (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1);
     });
   }
 
-  // Agent: only own clients + shared with them
-  var myUid = _fbUserId;
+  // Agent: ONLY their own clients (strict)
   return clients.filter(function(c) {
-    if (!c.ownedBy) return true; // legacy
-    if (c.ownedBy === myUid) return true;
-    if (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1) return true;
-    return false;
+    if (!c.ownedBy) return false; // legacy clients without owner → NOT shown to agents
+    return c.ownedBy === myUid
+        || (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1);
   });
 }
 
