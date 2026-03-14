@@ -52,6 +52,13 @@ header{background:linear-gradient(135deg,#0a0f1e,#0d1829);border-bottom:1px soli
 .logo-name{font-family:'Syne',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.5px;}
 .logo-name span{color:var(--gold);}
 .logo-sub{font-weight:400;font-size:13px;color:var(--muted);margin-left:4px;}
+.jarvis-logo { display:flex; align-items:center; gap:8px; cursor:pointer; position:absolute; left:50%; transform:translateX(-50%); }
+.jarvis-logo-icon { width:36px; height:36px; background:linear-gradient(135deg,#4a85f5,#a855f7); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; transition:all .2s; border:1px solid rgba(168,85,247,.3); }
+.jarvis-logo-icon.jl-md { width:52px; height:52px; font-size:26px; }
+.jarvis-logo-icon.jl-lg { width:72px; height:72px; font-size:36px; }
+.jarvis-logo-name { font-family:'Syne',sans-serif; font-weight:800; font-size:18px; letter-spacing:-0.5px; background:linear-gradient(135deg,#4a85f5,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.jarvis-logo-sub { font-size:11px; color:var(--muted); font-weight:400; }
+header { position:relative; }
 .saving-dot{width:7px;height:7px;border-radius:50%;background:transparent;display:inline-block;margin-left:6px;transition:all .3s;vertical-align:middle;}
 .saving-dot.saving{background:var(--orange);animation:pulse .7s infinite;}
 .saving-dot.saved{background:var(--green);}
@@ -744,6 +751,14 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
       <span class="saving-dot" id="savingDot"></span>
     </div>
   </div>
+  <!-- Jarvis logo center -->
+  <div class="jarvis-logo" onclick="openJarvisLogoSettings()" title="Personalizar logo Jarvis">
+    <div class="jarvis-logo-icon" id="jarvisLogoIcon">🤖</div>
+    <div>
+      <div class="jarvis-logo-name" id="jarvisLogoName">Jarvis</div>
+      <div class="jarvis-logo-sub" id="jarvisLogoSub">AI Assistant</div>
+    </div>
+  </div>
   <div class="hdr-right">
     <div id="userDisplay" style="display:flex;align-items:center;gap:6px"></div>
     <div class="lang-toggle">
@@ -971,6 +986,52 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
     <div class="fc-mftr">
       <button class="btn-cancel" onclick="clearLogoImg()">Quitar imagen</button>
       <button class="btn-save" onclick="saveLogoSettings()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- JARVIS LOGO SETTINGS -->
+<div class="fc-modal-ov" id="jarvisLogoSettingsOv" style="display:none">
+  <div class="fc-modal" style="max-width:400px">
+    <div class="fc-mhdr">
+      <div class="fc-mtitle">🤖 Logo de Jarvis</div>
+      <button class="fc-mx" onclick="closeJarvisLogoSettings()">✕</button>
+    </div>
+    <div class="fc-mbody">
+      <div class="ls-fg"><label>Nombre</label>
+        <input id="jl-name" placeholder="Jarvis"></div>
+      <div class="ls-fg"><label>Subtítulo</label>
+        <input id="jl-sub" placeholder="AI Assistant"></div>
+      <div class="ls-fg"><label>Ícono (emoji)</label>
+        <input id="jl-icon" placeholder="🤖" maxlength="4" style="font-size:24px;text-align:center"></div>
+      <div class="ls-fg"><label>Tamaño</label>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px">
+          <div class="sz-btn active" data-jlsz="sm" onclick="pickJarvisSize('sm')">
+            <div style="font-size:18px;margin-bottom:3px">🤖</div>
+            <div style="font-size:10px;font-weight:700">Pequeño</div>
+          </div>
+          <div class="sz-btn" data-jlsz="md" onclick="pickJarvisSize('md')">
+            <div style="font-size:26px;margin-bottom:3px">🤖</div>
+            <div style="font-size:10px;font-weight:700">Mediano</div>
+          </div>
+          <div class="sz-btn" data-jlsz="lg" onclick="pickJarvisSize('lg')">
+            <div style="font-size:34px;margin-bottom:3px">🤖</div>
+            <div style="font-size:10px;font-weight:700">Grande</div>
+          </div>
+        </div>
+      </div>
+      <div class="ls-fg"><label>Imagen del Logo (opcional)</label>
+        <div onclick="document.getElementById('jl-img-input').click()"
+          style="border:2px dashed rgba(168,85,247,.3);border-radius:8px;padding:14px;text-align:center;cursor:pointer;font-size:12px;color:#64748b">
+          📁 Clic para subir imagen (PNG, JPG, SVG)
+          <img id="jl-prev" style="display:none;max-height:50px;max-width:120px;margin:8px auto;object-fit:contain">
+        </div>
+        <input type="file" id="jl-img-input" accept="image/*" style="display:none" onchange="handleJarvisLogoImg(event)">
+      </div>
+    </div>
+    <div class="fc-mftr">
+      <button class="btn-cancel" onclick="clearJarvisLogoImg()">Quitar imagen</button>
+      <button class="btn-save" onclick="saveJarvisLogoSettings()">💾 Guardar</button>
     </div>
   </div>
 </div>
@@ -1469,6 +1530,7 @@ async function loadAll() {
         callHistory = d.callHistory || {};
         commHistory = d.commHistory || [];
         incomeTxs   = d.incomeTxs  || [];
+        if (d.jarvisLogoD) { jarvisLogoD = d.jarvisLogoD; applyJarvisLogo(); }
         fcTxs       = d.fcTxs      || [];
         logoD       = d.logoD      || {};
         // Also save to localStorage as backup
@@ -1560,7 +1622,7 @@ async function doSave() {
   var dot = document.getElementById('savingDot');
   if (dot) dot.className = 'saving-dot saving';
   var data = { clients: clients, callHistory: callHistory, commHistory: commHistory,
-               incomeTxs: incomeTxs, fcTxs: fcTxs, logoD: logoD };
+               incomeTxs: incomeTxs, fcTxs: fcTxs, logoD: logoD, jarvisLogoD: jarvisLogoD };
   try { localStorage.setItem('dlcr_titlecos', JSON.stringify(_titleCompanies)); } catch(ex) {}
   // 1. Save to localStorage (instant)
   try { localStorage.setItem('dlcr_v4', JSON.stringify(data)); } catch(ex) {}
@@ -2485,6 +2547,78 @@ function applyLogo() {
   }
   hdr.classList.remove('logo-sm','logo-md','logo-lg');
   hdr.classList.add('logo-' + (logoD.size || 'sm'));
+}
+
+// ── Jarvis Logo ──
+var jarvisLogoD = { name:'Jarvis', sub:'AI Assistant', icon:'🤖', size:'sm', img:null };
+
+function applyJarvisLogo() {
+  var iconEl = document.getElementById('jarvisLogoIcon');
+  var nameEl = document.getElementById('jarvisLogoName');
+  var subEl  = document.getElementById('jarvisLogoSub');
+  if (!iconEl) return;
+  // Size
+  iconEl.className = 'jarvis-logo-icon' + (jarvisLogoD.size==='md'?' jl-md':jarvisLogoD.size==='lg'?' jl-lg':'');
+  // Image or emoji
+  if (jarvisLogoD.img) {
+    iconEl.innerHTML = '<img src="'+jarvisLogoD.img+'" style="width:100%;height:100%;object-fit:contain;border-radius:6px">';
+  } else {
+    iconEl.textContent = jarvisLogoD.icon || '🤖';
+  }
+  if (nameEl) nameEl.textContent = jarvisLogoD.name || 'Jarvis';
+  if (subEl)  subEl.textContent  = jarvisLogoD.sub  || 'AI Assistant';
+}
+
+function openJarvisLogoSettings() {
+  var ov = document.getElementById('jarvisLogoSettingsOv');
+  if (!ov) return;
+  document.getElementById('jl-name').value = jarvisLogoD.name || 'Jarvis';
+  document.getElementById('jl-sub').value  = jarvisLogoD.sub  || 'AI Assistant';
+  document.getElementById('jl-icon').value = jarvisLogoD.icon || '🤖';
+  var sz = jarvisLogoD.size || 'sm';
+  document.querySelectorAll('[data-jlsz]').forEach(function(b){ b.classList.toggle('active', b.dataset.jlsz === sz); });
+  ov.style.display = 'flex';
+}
+
+function closeJarvisLogoSettings() {
+  var ov = document.getElementById('jarvisLogoSettingsOv');
+  if (ov) ov.style.display = 'none';
+}
+
+function pickJarvisSize(sz) {
+  jarvisLogoD.size = sz;
+  document.querySelectorAll('[data-jlsz]').forEach(function(b){ b.classList.toggle('active', b.dataset.jlsz === sz); });
+  applyJarvisLogo();
+}
+
+function handleJarvisLogoImg(evt) {
+  var file = evt.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    jarvisLogoD.img = e.target.result;
+    var prev = document.getElementById('jl-prev');
+    if (prev) { prev.src = e.target.result; prev.style.display = 'block'; }
+    applyJarvisLogo();
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveJarvisLogoSettings() {
+  jarvisLogoD.name = document.getElementById('jl-name').value.trim() || 'Jarvis';
+  jarvisLogoD.sub  = document.getElementById('jl-sub').value.trim()  || 'AI Assistant';
+  jarvisLogoD.icon = document.getElementById('jl-icon').value.trim() || '🤖';
+  applyJarvisLogo();
+  saveAll();
+  closeJarvisLogoSettings();
+  showToast('✅ Logo de Jarvis guardado');
+}
+
+function clearJarvisLogoImg() {
+  jarvisLogoD.img = null;
+  var prev = document.getElementById('jl-prev');
+  if (prev) prev.style.display = 'none';
+  applyJarvisLogo();
 }
 
 function openLogoSettings() {
