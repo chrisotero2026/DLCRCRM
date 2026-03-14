@@ -5667,7 +5667,7 @@ function jvSystemPrompt() {
     ? venc.map(function(c){ return c.name + ' (tel:' + c.phone + ', vencido:' + c.nextCall + ')'; }).join(' | ')
     : 'ninguno';
 
-  // Todays calls
+  // Today's calls
   var todayCalls = allClients.filter(function(c){ return c.nextCall === todayISO && c.stage !== 'closed'; });
   var todayCallStr = todayCalls.length
     ? todayCalls.map(function(c){ return c.name + ' (' + c.phone + ')'; }).join(', ')
