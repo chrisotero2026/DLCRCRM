@@ -892,19 +892,13 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
       <button class="lang-btn active" onclick="setLang('es')">ES</button>
       <button class="lang-btn" onclick="setLang('en')">EN</button>
       <div class="theme-picker" style="margin-left:8px;display:flex;flex-wrap:wrap;gap:4px;max-width:180px">
-        <div class="theme-dot t-dark active"   title="Oscuro"     onclick="setTheme('dark')"     id="tdark"></div>
-        <div class="theme-dot t-midnight"      title="Midnight"   onclick="setTheme('midnight')" id="tmidnight"></div>
-        <div class="theme-dot t-navy"          title="Navy"       onclick="setTheme('navy')"     id="tnavy"></div>
         <div class="theme-dot t-slate"         title="Slate"      onclick="setTheme('slate')"    id="tslate"></div>
-        <div class="theme-dot t-blue"          title="Azul"       onclick="setTheme('blue')"     id="tblue"></div>
         <div class="theme-dot t-teal"          title="Teal"       onclick="setTheme('teal')"     id="tteal"></div>
-        <div class="theme-dot t-green"         title="Verde"      onclick="setTheme('green')"    id="tgreen"></div>
-        <div class="theme-dot t-purple"        title="Morado"     onclick="setTheme('purple')"   id="tpurple"></div>
-        <div class="theme-dot t-rose"          title="Rosa"       onclick="setTheme('rose')"     id="trose"></div>
-        <div class="theme-dot t-red"           title="Rojo"       onclick="setTheme('red')"      id="tred"></div>
-        <div class="theme-dot t-orange"        title="Naranja"    onclick="setTheme('orange')"   id="torange"></div>
         <div class="theme-dot t-yellow"        title="Amarillo"   onclick="setTheme('yellow')"   id="tyellow"></div>
         <div class="theme-dot t-light"         title="Claro"      onclick="setTheme('light')"    id="tlight"></div>
+        <div class="theme-dot t-midnight"      title="Midnight"   onclick="setTheme('midnight')" id="tmidnight"></div>
+        <div class="theme-dot t-blue"          title="Azul"       onclick="setTheme('blue')"     id="tblue"></div>
+        <div class="theme-dot t-rose"          title="Rosa"       onclick="setTheme('rose')"     id="trose"></div>
       </div>
     </div>
     <div class="notif-btn" onclick="openReminders()">🔔<div class="notif-badge" id="notifBadge">0</div></div>
@@ -2003,6 +1997,9 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 //  LANGUAGE
 // ════════════════════════════════════════
 function setTheme(t) {
+  // If saved theme no longer exists, default to slate
+  var validThemes = ['slate','teal','yellow','light','midnight','blue','rose'];
+  if (t !== 'dark' && validThemes.indexOf(t) === -1) t = 'slate';
   document.documentElement.setAttribute('data-theme', t === 'dark' ? '' : t);
   document.querySelectorAll('.theme-dot').forEach(function(d){ d.classList.remove('active'); });
   var el = document.getElementById('t' + t);
