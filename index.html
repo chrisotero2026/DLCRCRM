@@ -1761,7 +1761,11 @@ async function loadAll() {
         var snap = await fb.getDoc(ref);
       if (snap.exists()) {
         var d = snap.data();
-        clients     = d.clients     || [];
+        // Tag legacy clients that don't have ownedBy
+        clients = (d.clients || []).map(function(c) {
+          if (!c.ownedBy) c.ownedBy = _fbUserId;
+          return c;
+        });
         callHistory = d.callHistory || {};
         commHistory = d.commHistory || [];
         incomeTxs   = d.incomeTxs  || [];
@@ -1780,7 +1784,10 @@ async function loadAll() {
           var raw = localStorage.getItem('dlcr_v4');
           if (raw) {
             var d2 = JSON.parse(raw);
-            clients     = d2.clients     || [];
+            clients = (d2.clients || []).map(function(c) {
+              if (!c.ownedBy) c.ownedBy = _fbUserId;
+              return c;
+            });
             callHistory = d2.callHistory || {};
             commHistory = d2.commHistory || [];
             incomeTxs   = d2.incomeTxs  || [];
@@ -4363,17 +4370,16 @@ function getVisibleClients() {
       .map(function(m) { return m.uid; });
     teamUids.push(myUid);
     return clients.filter(function(c) {
-      if (!c.ownedBy) return c.ownedBy === undefined; // legacy: only show if truly unowned
+      if (!c.ownedBy) return true; // legacy client without ownedBy — show to manager
       return teamUids.indexOf(c.ownedBy) !== -1
           || (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1);
     });
   }
 
-  // Agent: their own clients + shared copies (which are in their bucket)
+  // Agent: their own clients + shared copies
   return clients.filter(function(c) {
-    // Shared copy written directly into agent's bucket
-    if (c._isSharedCopy) return true;
-    if (!c.ownedBy) return false;
+    if (c._isSharedCopy) return true;      // shared copy written into bucket
+    if (!c.ownedBy) return true;           // legacy client (no ownedBy = belongs to this user's bucket)
     return c.ownedBy === myUid
         || (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1);
   });
