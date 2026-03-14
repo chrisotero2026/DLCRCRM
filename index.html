@@ -1471,7 +1471,8 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 let clients = [];
 let callHistory = {};
 let commHistory = [];
-let incomeTxs = [];
+let incomeTxs   = [];
+let myIncomeTxs = []; // Completely separate from incomeTxs
 let fcTxs = [];
 let logoD = {};
 let lang = 'es';
@@ -1602,8 +1603,9 @@ async function loadAll() {
         incomeTxs   = d.incomeTxs  || [];
         if (d.jarvisLogoD) { jarvisLogoD = d.jarvisLogoD; }
         if (d.theme) { localStorage.setItem('dlcr_theme', d.theme); }
-        fcTxs       = d.fcTxs      || [];
-        logoD       = d.logoD      || {};
+        fcTxs        = d.fcTxs        || [];
+        myIncomeTxs  = d.myIncomeTxs  || [];
+        logoD        = d.logoD        || {};
         // Also save to localStorage as backup
         try { localStorage.setItem('dlcr_v4', JSON.stringify(d)); } catch(ex){}
         if (dot) dot.className = 'saving-dot saved';
@@ -1622,6 +1624,7 @@ async function loadAll() {
             logoD       = d2.logoD      || {};
             if (d2.jarvisLogoD) { jarvisLogoD = d2.jarvisLogoD; }
             if (d2.theme) { localStorage.setItem('dlcr_theme', d2.theme); }
+            myIncomeTxs = d2.myIncomeTxs || [];
           }
         } catch(ex) {}
         if (dot) dot.className = 'saving-dot';
@@ -1701,8 +1704,8 @@ async function doSave() {
   if (dot) dot.className = 'saving-dot saving';
   var currentTheme = localStorage.getItem('dlcr_theme') || 'dark';
   var data = { clients: clients, callHistory: callHistory, commHistory: commHistory,
-               incomeTxs: incomeTxs, fcTxs: fcTxs, logoD: logoD, jarvisLogoD: jarvisLogoD,
-               theme: currentTheme };
+               incomeTxs: incomeTxs, myIncomeTxs: myIncomeTxs, fcTxs: fcTxs,
+               logoD: logoD, jarvisLogoD: jarvisLogoD, theme: currentTheme };
   try { localStorage.setItem('dlcr_titlecos', JSON.stringify(_titleCompanies)); } catch(ex) {}
   // 1. Save to localStorage (instant)
   try { localStorage.setItem('dlcr_v4', JSON.stringify(data)); } catch(ex) {}
@@ -2620,6 +2623,7 @@ function exportJSON() {
     exportDate: new Date().toISOString(),
     clients: clients,
     incomeTxs: incomeTxs,
+    myIncomeTxs: myIncomeTxs,
     callHistory: callHistory,
     commHistory: commHistory,
     fcTxs: fcTxs,
@@ -2773,8 +2777,9 @@ function importJSON(event) {
   reader.onload = function(e) {
     try {
       var data = JSON.parse(e.target.result);
-      if (data.clients)     clients     = data.clients;
-      if (data.incomeTxs)   incomeTxs   = data.incomeTxs;
+      if (data.clients)       clients       = data.clients;
+      if (data.incomeTxs)     incomeTxs     = data.incomeTxs;
+      if (data.myIncomeTxs)   myIncomeTxs   = data.myIncomeTxs;
       if (data.callHistory) callHistory = data.callHistory;
       if (data.commHistory) commHistory = data.commHistory;
       if (data.fcTxs)       fcTxs       = data.fcTxs;
@@ -4414,11 +4419,7 @@ var JV_CMDS = []; // kept for compatibility
 //  MY INCOME — Agent personal income view
 // ══════════════════════════════════════════════════════════════
 function getMyIncome() {
-  if (typeof incomeTxs === 'undefined') return [];
-  if (isOwner()) return incomeTxs;
-  return incomeTxs.filter(function(tx) {
-    return !tx.createdBy || tx.createdBy === _fbUserId;
-  });
+  return myIncomeTxs;
 }
 
 function renderMyIncome() {
@@ -4493,16 +4494,14 @@ function renderMyIncome() {
 
 function deleteMyIncome(id) {
   if (!confirm(lang === 'es' ? '¿Eliminar este ingreso?' : 'Delete this income?')) return;
-  if (typeof incomeTxs !== 'undefined') {
-    incomeTxs = incomeTxs.filter(function(t){ return t.id !== id; });
-    if (typeof saveAll === 'function') saveAll();
-  }
+  myIncomeTxs = myIncomeTxs.filter(function(t){ return t.id !== id; });
+  saveAll();
   showToast('🗑️ ' + (lang === 'es' ? 'Ingreso eliminado' : 'Income deleted'));
   renderMyIncome();
 }
 
 function editMyIncome(id) {
-  var tx = (typeof incomeTxs !== 'undefined') ? incomeTxs.find(function(t){ return t.id === id; }) : null;
+  var tx = myIncomeTxs.find(function(t){ return t.id === id; });
   if (!tx) return;
   var isEs = lang === 'es';
   var h = '<div>';
@@ -4543,17 +4542,16 @@ function editMyIncome(id) {
 }
 
 function saveEditMyIncome(id) {
-  if (typeof incomeTxs === 'undefined') return;
-  var idx = incomeTxs.findIndex(function(t){ return t.id === id; });
+  var idx = myIncomeTxs.findIndex(function(t){ return t.id === id; });
   if (idx === -1) return;
-  incomeTxs[idx].client      = (document.getElementById('ei-client').value||'').trim();
-  incomeTxs[idx].clientName  = incomeTxs[idx].client;
-  incomeTxs[idx].amount      = parseFloat(document.getElementById('ei-amount').value)||0;
-  incomeTxs[idx].date        = document.getElementById('ei-date').value;
-  incomeTxs[idx].category    = document.getElementById('ei-cat').value;
-  incomeTxs[idx].type        = document.getElementById('ei-type').value;
-  incomeTxs[idx].notes       = (document.getElementById('ei-notes').value||'').trim();
-  if (typeof saveAll === 'function') saveAll();
+  myIncomeTxs[idx].client     = (document.getElementById('ei-client').value||'').trim();
+  myIncomeTxs[idx].clientName = myIncomeTxs[idx].client;
+  myIncomeTxs[idx].amount     = parseFloat(document.getElementById('ei-amount').value)||0;
+  myIncomeTxs[idx].date       = document.getElementById('ei-date').value;
+  myIncomeTxs[idx].category   = document.getElementById('ei-cat').value;
+  myIncomeTxs[idx].type       = document.getElementById('ei-type').value;
+  myIncomeTxs[idx].notes      = (document.getElementById('ei-notes').value||'').trim();
+  saveAll();
   closeGenModal();
   showToast('✅ ' + (lang === 'es' ? 'Ingreso actualizado' : 'Income updated'));
   renderMyIncome();
@@ -4611,10 +4609,8 @@ function saveMyIncome() {
     createdByName: (_fbUser && (_fbUser.displayName || _fbUser.email)) || 'Owner',
     createdByRole: (_userProfile && _userProfile.role) || 'agent'
   };
-  if (typeof incomeTxs !== 'undefined') {
-    incomeTxs.push(tx);
-    if (typeof saveAll === 'function') saveAll();
-  }
+  myIncomeTxs.push(tx);
+  saveAll();
   closeGenModal();
   showToast('✅ ' + (lang === 'es' ? 'Ingreso guardado' : 'Income saved'));
   renderMyIncome();
