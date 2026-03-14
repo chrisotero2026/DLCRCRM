@@ -1660,6 +1660,78 @@ function initFirebase() {
   }
 }
 
+// ── Owner: load ALL users' data merged ──
+async function loadOwnerAllData(fb) {
+  try {
+    // Load owner's own data first
+    var ownerRef  = fb.doc(_fbDb, 'crm', _fbUserId);
+    var ownerSnap = await fb.getDoc(ownerRef);
+    var ownerData = ownerSnap.exists() ? ownerSnap.data() : {};
+    clients     = ownerData.clients     || [];
+    callHistory = ownerData.callHistory || {};
+    commHistory = ownerData.commHistory || [];
+    incomeTxs   = ownerData.incomeTxs  || [];
+    fcTxs       = ownerData.fcTxs      || [];
+    myIncomeTxs = ownerData.myIncomeTxs || [];
+    logoD       = ownerData.logoD      || {};
+    if (ownerData.jarvisLogoD) jarvisLogoD = ownerData.jarvisLogoD;
+    if (ownerData.theme) localStorage.setItem('dlcr_theme', ownerData.theme);
+
+    // Then load all agents' clients and merge
+    await loadTeamMembers();
+    for (var i = 0; i < _teamMembers.length; i++) {
+      var member = _teamMembers[i];
+      if (member.uid === _fbUserId) continue; // skip self
+      try {
+        var mRef  = fb.doc(_fbDb, 'crm', member.uid);
+        var mSnap = await fb.getDoc(mRef);
+        if (mSnap.exists()) {
+          var md = mSnap.data();
+          var mClients = (md.clients || []).map(function(c) {
+            // Ensure ownedBy is set for legacy clients
+            if (!c.ownedBy) {
+              c.ownedBy     = member.uid;
+              c.ownedByName = member.name || member.email || member.uid;
+            }
+            return c;
+          });
+          // Merge: avoid duplicates by id
+          mClients.forEach(function(mc) {
+            if (!clients.find(function(e) { return e.id === mc.id; })) {
+              clients.push(mc);
+            }
+          });
+          // Merge income
+          (md.incomeTxs || []).forEach(function(tx) {
+            if (!incomeTxs.find(function(e) { return e.id === tx.id; })) {
+              incomeTxs.push(tx);
+            }
+          });
+        }
+      } catch(ex) { console.warn('loadOwnerAllData member', member.uid, ex); }
+    }
+    try { localStorage.setItem('dlcr_v4', JSON.stringify({ clients:clients, callHistory:callHistory, commHistory:commHistory, incomeTxs:incomeTxs, fcTxs:fcTxs, logoD:logoD, jarvisLogoD:jarvisLogoD, myIncomeTxs:myIncomeTxs })); } catch(ex){}
+    var dot = document.getElementById('savingDot');
+    if (dot) { dot.className = 'saving-dot saved'; setTimeout(function(){ dot.className='saving-dot'; }, 1800); }
+  } catch(ex) { console.warn('loadOwnerAllData failed:', ex); }
+}
+
+// ── Owner: save to a SPECIFIC agent's bucket (impersonation) ──
+async function saveClientToAgent(c) {
+  if (!c.ownedBy || !_fbDb) return;
+  try {
+    var fb    = window._firebase;
+    var ref   = fb.doc(_fbDb, 'crm', c.ownedBy);
+    var snap  = await fb.getDoc(ref);
+    var data  = snap.exists() ? snap.data() : {};
+    var agentClients = (data.clients || []);
+    var idx   = agentClients.findIndex(function(x) { return x.id === c.id; });
+    if (idx !== -1) agentClients[idx] = c;
+    else agentClients.push(c);
+    await fb.setDoc(ref, { ...data, clients: agentClients }, { merge: true });
+  } catch(ex) { console.warn('saveClientToAgent:', ex); }
+}
+
 async function loadAll() {
   var dot = document.getElementById('savingDot');
   if (dot) dot.className = 'saving-dot saving';
@@ -1670,8 +1742,12 @@ async function loadAll() {
   if (fbOk && _fbDb) {
     try {
       var fb = window._firebase;
-      var ref = fb.doc(_fbDb, 'crm', _fbUserId);
-      var snap = await fb.getDoc(ref);
+      // Owner loads ALL agents' data merged
+      if (isOwner && isOwner() && _fbUser) {
+        await loadOwnerAllData(fb);
+      } else {
+        var ref = fb.doc(_fbDb, 'crm', _fbUserId);
+        var snap = await fb.getDoc(ref);
       if (snap.exists()) {
         var d = snap.data();
         clients     = d.clients     || [];
@@ -1706,6 +1782,7 @@ async function loadAll() {
         } catch(ex) {}
         if (dot) dot.className = 'saving-dot';
       }
+      } // end else (non-owner)
     } catch(ex) {
       console.warn('Firebase load failed, trying Jarvis server...', ex);
       var serverOk = await loadFromJarvisServer();
@@ -1728,6 +1805,10 @@ async function loadAll() {
   if (_fbUser && _fbDb) {
     await loadUserProfile(_fbUser.uid);
     await loadTeamMembers();
+    // If owner, now that profile+team are loaded, merge all agents' clients
+    if (isOwner()) {
+      await loadOwnerAllData(window._firebase);
+    }
     applyTabPermissions();
   }
   renderAll();
@@ -1790,8 +1871,44 @@ async function doSave() {
   if (_fbDb) {
     try {
       var fb = window._firebase;
-      var ref = fb.doc(_fbDb, 'crm', _fbUserId);
-      await fb.setDoc(ref, data);
+      if (isOwner()) {
+        // Owner: save own config to crm/main
+        var ownerData = { callHistory: callHistory, commHistory: commHistory,
+                          incomeTxs: incomeTxs, myIncomeTxs: myIncomeTxs, fcTxs: fcTxs,
+                          logoD: logoD, jarvisLogoD: jarvisLogoD, theme: currentTheme };
+        var ownerRef = fb.doc(_fbDb, 'crm', _fbUserId);
+        await fb.setDoc(ownerRef, ownerData, { merge: true });
+        // Owner clients that belong to owner: save to owner bucket
+        var ownerOwnClients = clients.filter(function(c) { return !c.ownedBy || c.ownedBy === _fbUserId; });
+        await fb.setDoc(ownerRef, { clients: ownerOwnClients }, { merge: true });
+        // Clients belonging to agents: group by ownedBy and save to each
+        var byAgent = {};
+        clients.forEach(function(c) {
+          if (c.ownedBy && c.ownedBy !== _fbUserId) {
+            if (!byAgent[c.ownedBy]) byAgent[c.ownedBy] = [];
+            byAgent[c.ownedBy].push(c);
+          }
+        });
+        for (var agentUid in byAgent) {
+          try {
+            var aRef  = fb.doc(_fbDb, 'crm', agentUid);
+            var aSnap = await fb.getDoc(aRef);
+            var aData = aSnap.exists() ? aSnap.data() : {};
+            var aClients = aData.clients || [];
+            byAgent[agentUid].forEach(function(c) {
+              var idx = aClients.findIndex(function(x) { return x.id === c.id; });
+              if (idx !== -1) aClients[idx] = c;
+              else aClients.push(c);
+            });
+            await fb.setDoc(aRef, { clients: aClients }, { merge: true });
+          } catch(ex) { console.warn('Owner save to agent', agentUid, ex); }
+        }
+      } else {
+        // Agent/Manager: save only their own visible clients
+        var myClients = clients.filter(function(c) { return !c.ownedBy || c.ownedBy === _fbUserId; });
+        var ref = fb.doc(_fbDb, 'crm', _fbUserId);
+        await fb.setDoc(ref, { ...data, clients: myClients });
+      }
       if (dot) { dot.className = 'saving-dot saved'; setTimeout(function(){ if(dot) dot.className='saving-dot'; }, 1800); }
     } catch(ex) {
       console.warn('Firebase save failed:', ex);
@@ -1993,7 +2110,7 @@ function renderClients(){
     return `<div class="card ${brd}" onclick="openDetail(${c.id})">
       <div class="temp-ico ${tempCls[c.temp]}">${tempEmoji[c.temp]}</div>
       <div>
-        <div class="c-name">${c.name}</div>
+        <div class="c-name">${c.name}${(isOwner()||(_userProfile&&(_userProfile.role==='manager')))&&c.ownedBy&&c.ownedBy!==_fbUserId?'<span style="font-size:9px;font-weight:700;background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.3);padding:1px 6px;border-radius:20px;margin-left:5px">👤 '+(c.ownedByName||c.ownedBy.slice(0,8))+'</span>':''}${c.sharedWith&&c.sharedWith.length?'<span style="font-size:9px;font-weight:700;background:rgba(34,197,94,.1);color:#22c55e;border:1px solid rgba(34,197,94,.25);padding:1px 6px;border-radius:20px;margin-left:3px">🔗</span>':''}</div>
         <div class="c-meta">
           <span class="tag ${typeTagCls[c.type]}">${T[lang].types[c.type]||c.type}</span>
           ${c.rate?`<span class="c-sm">📊 ${c.rate}%</span>`:''}
@@ -2445,7 +2562,7 @@ function openDetail(id){
   panel.innerHTML=`
     <div class="dp-header">
       <button class="dp-close" onclick="closeDetail()">✕</button>
-      <div class="dp-name">${c.name}</div>
+      <div class="dp-name">${c.name}${(isOwner()||(_userProfile&&_userProfile.role==='manager'))&&c.ownedBy&&c.ownedBy!==_fbUserId?'<span style="font-size:11px;font-weight:600;background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.25);padding:2px 8px;border-radius:20px;margin-left:8px">👤 '+(c.ownedByName||c.ownedBy.slice(0,8))+'</span>':''}</div>
       <div class="dp-tags">
         <span class="tag tag-${c.type}">${T[lang].types[c.type]||c.type}</span>
         <span class="tag" style="background:${TEMP_COLORS[c.temp]}22;color:${TEMP_COLORS[c.temp]}">${T[lang].temps[c.temp]}</span>
@@ -2460,6 +2577,8 @@ function openDetail(id){
     <div class="big-btns" style="margin-top:6px">
       <a class="big-btn" href="https://wa.me/${c.phone.replace(/\D/g,'')}" target="_blank" onclick="event.stopPropagation()" style="background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;border:none;text-decoration:none">💬 WhatsApp</a>
       <a class="big-btn" href="${c.email?'mailto:'+c.email:'#'}" onclick="event.stopPropagation()" style="background:linear-gradient(135deg,#4a85f5,#2d6cdf);color:#fff;border:none;text-decoration:none;opacity:${c.email?1:0.4}">✉️ Email</a>
+      ${(isOwner()||(_userProfile&&(_userProfile.role==='manager'||_userProfile.role==='supervisor'))) ? '<button class="big-btn" onclick="openShareClientModal('+c.id+')" style="background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.3)">🔗 Compartir</button>' : ''}
+      ${isOwner() && c.ownedBy && c.ownedBy !== _fbUserId ? '<button class="big-btn" onclick="openTransferClientModal('+c.id+')" style="background:rgba(240,165,0,.1);color:var(--gold);border:1px solid rgba(240,165,0,.25)">↗️ Transferir</button>' : ''}
     </div>
     <div class="big-btns" style="margin-top:6px">
       <a class="big-btn" href="https://meet.google.com/new" target="_blank" onclick="event.stopPropagation()" style="background:linear-gradient(135deg,#00897b,#00695c);color:#fff;border:none;text-decoration:none">📹 Meet</a>
@@ -2514,6 +2633,148 @@ function addHist(id){ const note=(document.getElementById('histNote')||{value:''
 function reschedule(id){ const c=clients.find(x=>x.id===id); const v=(document.getElementById('reschedule')||{value:''}).value; if(c&&v){c.nextCall=v;saveAll();renderAll();openDetail(id);showToast(tr('saved'));} }
 function saveNotes(id){ const c=clients.find(x=>x.id===id); if(c){c.notes=(document.getElementById('clientNotes')||{value:''}).value;saveAll();showToast(tr('saved'));} }
 function copyText(t){ navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>showToast(tr('copied'))); }
+// ── Share client modal ──
+function openShareClientModal(clientId) {
+  var c = clients.find(function(x) { return x.id === clientId; });
+  if (!c) return;
+  var sharedWith = c.sharedWith || [];
+  var sharedNames = c.sharedWithNames || {};
+
+  // Build available agents to share with
+  var available = _teamMembers.filter(function(m) {
+    return m.uid !== _fbUserId && sharedWith.indexOf(m.uid) === -1;
+  });
+  var currentShares = sharedWith.map(function(uid) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-bottom:5px">'
+      + '<span style="font-size:13px;color:#22c55e">✅ ' + (sharedNames[uid] || uid) + '</span>'
+      + '<button onclick="unshareClient('+clientId+',''+uid+'');closeShareModal()" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕ Quitar</button>'
+      + '</div>';
+  }).join('');
+
+  var addList = available.length > 0
+    ? available.map(function(m) {
+        return '<button onclick="shareClientWith('+clientId+',''+m.uid+'',''+m.name+'');closeShareModal()" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px">'
+          + '<span style="font-size:14px">' + ({'owner':'👑','manager':'🏆','supervisor':'⭐','agent':'👤'}[m.role]||'👤') + '</span>'
+          + '<div><div style="font-weight:700">' + (m.name||m.email||m.uid) + '</div>'
+          + '<div style="font-size:11px;color:var(--muted)">' + (m.role||'agent') + '</div></div></button>';
+      }).join('')
+    : '<p style="color:var(--muted);font-size:13px;text-align:center">No hay más usuarios disponibles</p>';
+
+  var html = '<div style="padding:20px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    + '<h3 style="margin:0;font-size:16px">🔗 Compartir: ' + c.name + '</h3>'
+    + '<button onclick="closeShareModal()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer">✕</button>'
+    + '</div>'
+    + (currentShares ? '<div style="margin-bottom:14px"><p style="font-size:12px;color:var(--muted);margin:0 0 6px">Compartido con:</p>' + currentShares + '</div>' : '')
+    + '<p style="font-size:12px;color:var(--muted);margin:0 0 8px">Compartir con:</p>'
+    + addList
+    + '</div>';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'shareClientOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto';
+  box.innerHTML = html;
+  overlay.appendChild(box);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeShareModal(); });
+  document.body.appendChild(overlay);
+}
+
+function closeShareModal() {
+  var el = document.getElementById('shareClientOverlay');
+  if (el) el.remove();
+}
+
+// ── Owner view-as-agent mode ──
+var _viewingAgent = null; // { uid, name } when owner is viewing an agent's folder
+
+// ── Transfer client to another agent ──
+function openTransferClientModal(clientId) {
+  var c = clients.find(function(x) { return x.id === clientId; });
+  if (!c) return;
+  var available = _teamMembers.filter(function(m) { return m.uid !== c.ownedBy; });
+  var listHtml = available.length > 0
+    ? available.map(function(m) {
+        return '<button onclick="transferClient('+clientId+',''+m.uid+'',''+m.name+'')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;color:inherit;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:5px">'
+          + '<span>'+({'owner':'👑','manager':'🏆','supervisor':'⭐','agent':'👤'}[m.role]||'👤')+'</span>'
+          + '<div><div style="font-weight:700">'+(m.name||m.email||m.uid)+'</div><div style="font-size:11px;color:var(--muted)">'+(m.role||'agent')+'</div></div></button>';
+      }).join('')
+    : '<p style="color:var(--muted);font-size:13px;text-align:center">No hay otros usuarios</p>';
+
+  var html = '<div style="padding:20px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    + '<h3 style="margin:0;font-size:16px">↗️ Transferir: '+c.name+'</h3>'
+    + '<button onclick="closeShareModal()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
+    + '<p style="font-size:12px;color:var(--muted);margin:0 0 10px">Propietario actual: <strong>'+(c.ownedByName||c.ownedBy||'Owner')+'</strong></p>'
+    + '<p style="font-size:12px;color:var(--muted);margin:0 0 8px">Transferir a:</p>'
+    + listHtml + '</div>';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'shareClientOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:16px;width:min(400px,90vw);max-height:80vh;overflow-y:auto';
+  box.innerHTML = html;
+  overlay.appendChild(box);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeShareModal(); });
+  document.body.appendChild(overlay);
+}
+
+async function transferClient(clientId, toUid, toName) {
+  var c = clients.find(function(x) { return x.id === clientId; });
+  if (!c) return;
+  var fromUid = c.ownedBy;
+  c.ownedBy     = toUid;
+  c.ownedByName = toName;
+  c.sharedWith  = (c.sharedWith||[]).filter(function(u){ return u !== toUid; });
+  closeShareModal();
+  saveAll();
+  renderAll();
+  showToast('✅ Cliente transferido a ' + toName);
+}
+
+function viewAgentFolder(uid, name) {
+  _viewingAgent = { uid: uid, name: name };
+  // Show banner
+  var banner = document.getElementById('agentViewBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'agentViewBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700';
+    document.body.style.paddingTop = '36px';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = '👁 Viendo carpeta de: <strong>' + name + '</strong>'
+    + '<button onclick="exitAgentView()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);border-radius:7px;padding:3px 12px;color:#fff;font-size:12px;cursor:pointer;font-family:inherit">✕ Salir</button>';
+  // Filter clients to only show this agent's
+  renderAll();
+  switchTab('clients');
+}
+
+function exitAgentView() {
+  _viewingAgent = null;
+  var banner = document.getElementById('agentViewBanner');
+  if (banner) { banner.remove(); document.body.style.paddingTop = ''; }
+  renderAll();
+}
+
+// Override getVisibleClients to respect _viewingAgent
+var _originalGetVisibleClients = getVisibleClients;
+getVisibleClients = function() {
+  if (_viewingAgent) {
+    // Owner is viewing a specific agent's folder
+    var agentUid = _viewingAgent.uid;
+    return clients.filter(function(c) {
+      if (!c.ownedBy) return false; // hide legacy when viewing agent
+      if (c.ownedBy === agentUid) return true;
+      if (c.sharedWith && c.sharedWith.indexOf(agentUid) !== -1) return true;
+      return false;
+    });
+  }
+  return _originalGetVisibleClients();
+};
+
 function openEmail(id){
   var c = clients.find(function(x){ return x.id === id; });
   if (!c) return;
@@ -2525,6 +2786,7 @@ function openEmail(id){
 }
 
 function deleteClient(id){
+  var delClient = clients.find(function(x){ return x.id===id; });
   if(!isOwner() && !(_userProfile && _userProfile.perms && _userProfile.perms['delete'])){
     showToast('❌ Solo el admin puede borrar clientes'); return;
   }
@@ -2580,8 +2842,12 @@ function saveClient(){
     email:document.getElementById('f-email').value.trim(),
     notes:document.getElementById('f-notes').value.trim(),
   };
-  if(editId) Object.assign(clients.find(x=>x.id===editId),data);
-  else clients.push({id:Date.now(),created:Date.now(),...data});
+  if(editId) {
+    var editC = clients.find(x=>x.id===editId);
+    if(editC && !canEditClient(editC)) { showToast('❌ No tienes permiso para editar este cliente'); return; }
+    Object.assign(editC,data);
+  }
+  else clients.push({id:Date.now(),created:Date.now(),ownedBy:_fbUserId,ownedByName:(_fbUser&&_fbUser.displayName)||'Agente',...data});
   saveAll(); closeModal(); renderAll(); showToast(tr('saved'));
   if(editId) openDetail(editId);
 }
@@ -3738,9 +4004,75 @@ function canDo(action) {
 function getVisibleClients() {
   if (isOwner()) return clients;
   if (!_userProfile) return [];
-  var assigned = _userProfile.assignedClients || [];
-  if (assigned.length === 0) return clients; // if none assigned, show all (for managers/supervisors)
-  return clients.filter(function(c) { return assigned.indexOf(c.id) !== -1; });
+  var role = _userProfile.role;
+
+  if (role === 'manager' || role === 'supervisor') {
+    // Manager sees: own clients + all agents under them
+    var myUid = _fbUserId;
+    var teamUids = _teamMembers
+      .filter(function(m) { return m.managerId === myUid; })
+      .map(function(m) { return m.uid; });
+    teamUids.push(myUid);
+    return clients.filter(function(c) {
+      // own client OR shared with me OR team member's client
+      if (c.ownedBy && teamUids.indexOf(c.ownedBy) !== -1) return true;
+      if (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1) return true;
+      if (!c.ownedBy) return true; // legacy clients (no ownedBy)
+      return false;
+    });
+  }
+
+  // Agent: only own clients + shared with them
+  var myUid = _fbUserId;
+  return clients.filter(function(c) {
+    if (!c.ownedBy) return true; // legacy
+    if (c.ownedBy === myUid) return true;
+    if (c.sharedWith && c.sharedWith.indexOf(myUid) !== -1) return true;
+    return false;
+  });
+}
+
+// ── Check if current user can edit a specific client ──
+function canEditClient(c) {
+  if (isOwner()) return true;
+  if (!_userProfile || !c) return false;
+  if (c.ownedBy === _fbUserId) return true;
+  if (_userProfile.role === 'manager' || _userProfile.role === 'supervisor') {
+    // Manager can edit team members' clients
+    var teamUids = _teamMembers
+      .filter(function(m) { return m.managerId === _fbUserId; })
+      .map(function(m) { return m.uid; });
+    if (c.ownedBy && teamUids.indexOf(c.ownedBy) !== -1) return true;
+  }
+  return false;
+}
+
+// ── Share a client with a user ──
+async function shareClientWith(clientId, targetUid, targetName) {
+  var c = clients.find(function(x) { return x.id === clientId; });
+  if (!c) return;
+  if (!c.sharedWith) c.sharedWith = [];
+  if (c.sharedWith.indexOf(targetUid) === -1) {
+    c.sharedWith.push(targetUid);
+    c.sharedWithNames = c.sharedWithNames || {};
+    c.sharedWithNames[targetUid] = targetName;
+    saveAll();
+    renderAll();
+    showToast('✅ Cliente compartido con ' + targetName);
+  } else {
+    showToast('ℹ️ Ya compartido con ' + targetName);
+  }
+}
+
+// ── Remove share ──
+function unshareClient(clientId, targetUid) {
+  var c = clients.find(function(x) { return x.id === clientId; });
+  if (!c || !c.sharedWith) return;
+  c.sharedWith = c.sharedWith.filter(function(u) { return u !== targetUid; });
+  if (c.sharedWithNames) delete c.sharedWithNames[targetUid];
+  saveAll();
+  renderAll();
+  showToast('✅ Acceso removido');
 }
 
 // ── Load team members (for admin panel) ──
@@ -3881,6 +4213,7 @@ function renderMemberCard(member) {
   // Show edit controls only for owner and not for self
   if (isOwner() && !isCurrentUser) {
     html += '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button onclick="viewAgentFolder(\'' + member.uid + '\',\'' + (member.name||member.email||'Agente') + '\')" style="font-size:11px;font-weight:700;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#22c55e;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">👁 Ver Carpeta</button>'
       + '<button onclick="showEditUserModal(\'' + member.uid + '\')" style="font-size:11px;font-weight:700;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);color:var(--gold);padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">✏️ Editar</button>'
       + '<button onclick="editMember(\'' + member.uid + '\')" style="font-size:11px;font-weight:700;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:#3b82f6;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">⚙️ Permisos</button>'
       + '<button onclick="assignClientsModal(\'' + member.uid + '\')" style="font-size:11px;font-weight:700;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.25);color:#a855f7;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">📋 Clientes</button>'
