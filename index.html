@@ -5118,68 +5118,95 @@ function showEditUserModal(uid) {
 
   var photoUrl = member.photoURL || '';
 
-  var html = '<div>'
-    + '<div style="font-size:16px;font-weight:800;margin-bottom:16px">✏️ Editar Usuario</div>'
+  // Build entire modal via DOM to avoid quote conflicts
+  var wrap = document.createElement('div');
 
-    // Photo upload
-    + '<div style="margin-bottom:16px;text-align:center">'
-    + '<div id="eu-photo-preview" style="width:72px;height:72px;border-radius:50%;margin:0 auto 8px;overflow:hidden;border:2px solid rgba(240,165,0,.4);background:rgba(240,165,0,.1);display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer" onclick="document.getElementById('eu-photo-input').click()">'
-    + (photoUrl ? '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover">' : '<span style="font-size:28px">👤</span>')
-    + '</div>'
-    + '<input id="eu-photo-input" type="file" accept="image/*" style="display:none" onchange="euPreviewPhoto(this)">'
-    + '<button onclick="document.getElementById('eu-photo-input').click()" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📷 Cambiar foto</button>'
-    + '</div>'
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:16px;font-weight:800;margin-bottom:16px';
+  title.textContent = '✏️ Editar Usuario';
+  wrap.appendChild(title);
 
-    + '<div style="margin-bottom:12px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nombre</label>'
-    + '<input id="eu-name" value="'+(member.name||'')+'" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"></div>'
+  // Photo section
+  var photoDiv = document.createElement('div');
+  photoDiv.style.cssText = 'margin-bottom:16px;text-align:center';
+  var photoEl = document.createElement('div');
+  photoEl.id = 'eu-photo-preview';
+  photoEl.style.cssText = 'width:72px;height:72px;border-radius:50%;margin:0 auto 8px;overflow:hidden;border:2px solid rgba(240,165,0,.4);background:rgba(240,165,0,.1);display:flex;align-items:center;justify-content:center;cursor:pointer';
+  photoEl.innerHTML = photoUrl ? '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover">' : '<span style="font-size:28px">👤</span>';
+  var fileIn = document.createElement('input');
+  fileIn.type='file'; fileIn.id='eu-photo-input'; fileIn.accept='image/*'; fileIn.style.display='none';
+  fileIn.addEventListener('change', function(){ euPreviewPhoto(this); });
+  photoEl.addEventListener('click', function(){ fileIn.click(); });
+  var photoBtn = document.createElement('button');
+  photoBtn.textContent = '📷 Cambiar foto';
+  photoBtn.style.cssText = 'background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit';
+  photoBtn.addEventListener('click', function(){ fileIn.click(); });
+  photoDiv.appendChild(photoEl); photoDiv.appendChild(fileIn); photoDiv.appendChild(photoBtn);
+  wrap.appendChild(photoDiv);
 
-    + '<div style="margin-bottom:12px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>'
-    + '<input id="eu-email" value="'+(member.email||'')+'" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"></div>'
+  function mkField(labelTxt, inputId, inputVal, inputType) {
+    var d = document.createElement('div');
+    d.style.marginBottom = '12px';
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px';
+    lbl.textContent = labelTxt;
+    var inp = document.createElement('input');
+    inp.id = inputId; inp.value = inputVal || ''; inp.type = inputType || 'text';
+    inp.style.cssText = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box';
+    d.appendChild(lbl); d.appendChild(inp);
+    return d;
+  }
 
-    + '<div style="margin-bottom:12px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nueva Contraseña <span style="color:#64748b;font-weight:400">(dejar en blanco para no cambiar)</span></label>'
-    + '<input id="eu-pass" type="text" placeholder="Nueva contraseña..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"></div>'
+  wrap.appendChild(mkField('Nombre', 'eu-name', member.name));
+  wrap.appendChild(mkField('Email', 'eu-email', member.email));
 
-    + '<div style="margin-bottom:16px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Rol</label>'
-    + '<select id="eu-role" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none">'
-    + ['manager','supervisor','agent'].map(function(r) {
-        return '<option value="'+r+'"'+(member.role===r?' selected':'')+'>'+ROLE_LABELS[r]+'</option>';
-      }).join('')
-    + '</select></div>'
+  var passDiv = document.createElement('div');
+  passDiv.style.marginBottom = '12px';
+  var passLbl = document.createElement('label');
+  passLbl.style.cssText = 'font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px';
+  passLbl.innerHTML = 'Nueva Contraseña <span style="color:#64748b;font-weight:400">(dejar en blanco para no cambiar)</span>';
+  var passInp = document.createElement('input');
+  passInp.id='eu-pass'; passInp.type='text'; passInp.placeholder='Nueva contraseña...';
+  passInp.style.cssText = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box';
+  passDiv.appendChild(passLbl); passDiv.appendChild(passInp);
+  wrap.appendChild(passDiv);
 
-    + '<div id="eu-error" style="font-size:12px;color:#ef4444;min-height:18px;margin-bottom:12px;font-weight:600"></div>'
-    + '<div style="display:flex;gap:8px">'
-    + '<button onclick="saveEditUser(\''+uid+'\')" style="flex:1;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,#f0a500,#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">💾 Guardar</button>'
-    + '<button onclick="closeGenModal()" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>'
-    + '</div></div>';
-  openGenModal(html);
-}
+  var roleDiv = document.createElement('div');
+  roleDiv.style.marginBottom = '16px';
+  var roleLbl = document.createElement('label');
+  roleLbl.style.cssText = 'font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px';
+  roleLbl.textContent = 'Rol';
+  var roleSel = document.createElement('select');
+  roleSel.id = 'eu-role';
+  roleSel.style.cssText = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none';
+  ['manager','supervisor','agent'].forEach(function(r){
+    var opt = document.createElement('option');
+    opt.value = r; opt.textContent = ROLE_LABELS[r];
+    if (member.role === r) opt.selected = true;
+    roleSel.appendChild(opt);
+  });
+  roleDiv.appendChild(roleLbl); roleDiv.appendChild(roleSel);
+  wrap.appendChild(roleDiv);
 
-// Preview photo before saving
-function euPreviewPhoto(input) {
-  if (!input.files || !input.files[0]) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var preview = document.getElementById('eu-photo-preview');
-    if (preview) preview.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover">';
-    preview.dataset.photoData = e.target.result;
-  };
-  // Resize to max 200x200 to keep Firestore doc small
-  var img = new Image();
-  img.onload = function() {
-    var canvas = document.createElement('canvas');
-    var MAX = 200;
-    var scale = Math.min(MAX/img.width, MAX/img.height, 1);
-    canvas.width  = Math.round(img.width  * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-    var data = canvas.toDataURL('image/jpeg', 0.8);
-    var preview = document.getElementById('eu-photo-preview');
-    if (preview) {
-      preview.innerHTML = '<img src="'+data+'" style="width:100%;height:100%;object-fit:cover">';
-      preview.dataset.photoData = data;
-    }
-  };
-  img.src = URL.createObjectURL(input.files[0]);
+  var errEl = document.createElement('div');
+  errEl.id = 'eu-error';
+  errEl.style.cssText = 'font-size:12px;color:#ef4444;min-height:18px;margin-bottom:12px;font-weight:600';
+  wrap.appendChild(errEl);
+
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px';
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = '💾 Guardar';
+  saveBtn.style.cssText = 'flex:1;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,#f0a500,#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+  saveBtn.addEventListener('click', function(){ saveEditUser(uid); });
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancelar';
+  cancelBtn.style.cssText = 'padding:11px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit';
+  cancelBtn.addEventListener('click', closeGenModal);
+  btnRow.appendChild(saveBtn); btnRow.appendChild(cancelBtn);
+  wrap.appendChild(btnRow);
+
+  openGenModal(wrap.innerHTML);
 }
 
 async function saveEditUser(uid) {
