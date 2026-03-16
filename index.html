@@ -6256,6 +6256,28 @@ function jvClearChat() {
   console.log('[Jarvis] Conversación limpiada');
 }
 
+
+// ── Convert markdown to clean HTML for Jarvis responses ──
+function jvMd(text) {
+  if (!text) return '';
+  return text
+    // Bold **text** or __text__
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    // Italic *text* or _text_
+    .replace(/\*([^*
+]+?)\*/g, '<em>$1</em>')
+    // Bullet points - convert to inline with •
+    .replace(/^[\s]*[-*•]\s+(.+)/gm, '• $1')
+    // Numbered list - keep inline
+    .replace(/^[\s]*\d+\.\s+(.+)/gm, '• $1')
+    // Line breaks
+    .replace(/
+{2,}/g, '<br><br>')
+    .replace(/
+/g, '<br>');
+}
+
 function jvAddMsg(role, text, isErr) {
   var c = document.getElementById('jvMsgs');
   var isUser = role === 'user';
@@ -6724,7 +6746,10 @@ function jvSystemPrompt() {
     '23. send_docs — params: { clientName*, method(sms/email/whatsapp) }',
     '',
     '=== REGLAS CRÍTICAS ===',
-    '- JSON válido siempre, sin markdown, sin texto extra fuera del JSON',
+    '- JSON válido siempre, sin texto extra fuera del JSON',
+    '- En el campo "reply" usa texto limpio: NO uses **negritas**, NO uses # headers, NO uses - bullets',
+    '- Para enfatizar usa MAYÚSCULAS o emojis, no markdown',
+    '- Listas: escríbelas inline con • o números, en un solo párrafo',
     '- Saludo SOLO en el primer mensaje de la sesión',
     '- NUNCA repitas el saludo',
     '- Después de cada llamada completa → pregunta cómo fue y ofrece archivar',
@@ -6783,7 +6808,7 @@ async function jvSend(override) {
       if(parsed.reply) jvAddToHistory('assistant', parsed.reply);
       await jvExecuteAction(parsed, msg);
     } else {
-      jvAddMsg('bot', raw);
+      jvAddMsg('bot', jvMd(raw));
       jvAddToHistory('assistant', raw);
     }
   } catch(e) {
@@ -6845,7 +6870,7 @@ async function jvExecuteAction(cmd, originalMsg) {
   var confirm= cmd.confirm !== false; // default true
 
   // Show reply first
-  jvAddMsg('bot', reply);
+  jvAddMsg('bot', jvMd(reply));
 
   // If needs confirmation
   if (!confirm) {
