@@ -923,7 +923,7 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
   <aside class="sidebar">
     <!-- CARPETAS (owner/manager only) -->
     <div id="folderSection" style="display:none">
-      <div class="nav-label" style="margin-top:4px" id="lbl-carpetas-wrap">📁 Carpetas</div>
+      <div class="nav-label" style="margin-top:4px" id="lbl-carpetas-wrap">👥 Mi Equipo</div>
       <div id="folderList"></div>
       <div style="border-top:1px solid var(--border);margin:6px 12px"></div>
     </div>
@@ -2117,7 +2117,7 @@ function setLang(l){
     'lbl-clients':l==='es'?'Clientes':'Clients','lbl-commission':l==='es'?'Comisión':'Commission',
     'lbl-team':l==='es'?'Equipo':'Team','lbl-mort':l==='es'?'Calculadora de Préstamo':'Loan Calculator',
     'lbl-income':l==='es'?'Ingresos':'Income','lbl-table':l==='es'?'Tabla':'Table',
-    'lbl-filter':l==='es'?'Filtrar':'Filter','lbl-all':l==='es'?'Todos':'All','lbl-carpetas-wrap':l==='es'?'📁 Carpetas':'📁 Folders',
+    'lbl-filter':l==='es'?'Filtrar':'Filter','lbl-all':l==='es'?'Todos':'All','lbl-carpetas-wrap':l==='es'?'👥 Mi Equipo':'👥 My Team',
     'lbl-buy':l==='es'?'Compra':'Purchase','lbl-sell':l==='es'?'Venta':'Sell',
     'lbl-buysell':l==='es'?'Venta/Compra':'Buy/Sell','lbl-loan':l==='es'?'Préstamo':'Loan',
     'lbl-hot':l==='es'?'Caliente':'Hot','lbl-cold':l==='es'?'Frío':'Cold',
@@ -2250,7 +2250,11 @@ function renderFolders() {
   // Each person's folder
   folders.forEach(function(f) {
     var icon  = f.isMe ? (isOwner() ? '👑' : '🏆') : (roleIcon[f.role] || '👤');
-    var label = f.isMe ? (lang==='es'?'Mis Clientes':'My Clients') : (f.name || f.uid);
+    var label = f.isMe
+      ? (isOwner()
+          ? ('👑 ' + ((_userProfile&&_userProfile.name) ? _userProfile.name.split(' ')[0] : (lang==='es'?'Owner':'Owner')))
+          : (lang==='es'?'Mis Clientes':'My Clients'))
+      : (f.name || f.uid);
     var d = document.createElement('div');
     d.className = 'nav-item folder-item' + (_folderFilter === f.uid ? ' active' : '');
     d.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
@@ -5103,8 +5107,19 @@ function showEditUserModal(uid) {
   var member = _teamMembers.find(function(m) { return m.uid === uid; });
   if (!member) return;
 
+  var photoUrl = member.photoURL || '';
+
   var html = '<div>'
     + '<div style="font-size:16px;font-weight:800;margin-bottom:16px">✏️ Editar Usuario</div>'
+
+    // Photo upload
+    + '<div style="margin-bottom:16px;text-align:center">'
+    + '<div id="eu-photo-preview" style="width:72px;height:72px;border-radius:50%;margin:0 auto 8px;overflow:hidden;border:2px solid rgba(240,165,0,.4);background:rgba(240,165,0,.1);display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer" onclick="document.getElementById('eu-photo-input').click()">'
+    + (photoUrl ? '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover">' : '<span style="font-size:28px">👤</span>')
+    + '</div>'
+    + '<input id="eu-photo-input" type="file" accept="image/*" style="display:none" onchange="euPreviewPhoto(this)">'
+    + '<button onclick="document.getElementById('eu-photo-input').click()" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📷 Cambiar foto</button>'
+    + '</div>'
 
     + '<div style="margin-bottom:12px"><label style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nombre</label>'
     + '<input id="eu-name" value="'+(member.name||'')+'" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box"></div>'
@@ -5130,6 +5145,34 @@ function showEditUserModal(uid) {
   openGenModal(html);
 }
 
+// Preview photo before saving
+function euPreviewPhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var preview = document.getElementById('eu-photo-preview');
+    if (preview) preview.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover">';
+    preview.dataset.photoData = e.target.result;
+  };
+  // Resize to max 200x200 to keep Firestore doc small
+  var img = new Image();
+  img.onload = function() {
+    var canvas = document.createElement('canvas');
+    var MAX = 200;
+    var scale = Math.min(MAX/img.width, MAX/img.height, 1);
+    canvas.width  = Math.round(img.width  * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    var data = canvas.toDataURL('image/jpeg', 0.8);
+    var preview = document.getElementById('eu-photo-preview');
+    if (preview) {
+      preview.innerHTML = '<img src="'+data+'" style="width:100%;height:100%;object-fit:cover">';
+      preview.dataset.photoData = data;
+    }
+  };
+  img.src = URL.createObjectURL(input.files[0]);
+}
+
 async function saveEditUser(uid) {
   var name  = (document.getElementById('eu-name').value || '').trim();
   var email = (document.getElementById('eu-email').value || '').trim();
@@ -5139,10 +5182,16 @@ async function saveEditUser(uid) {
   errEl.textContent = '';
   if (!name || !email) { errEl.textContent = 'Nombre y email son requeridos.'; return; }
 
+  // Get photo if changed
+  var photoPreview = document.getElementById('eu-photo-preview');
+  var photoURL = photoPreview && photoPreview.dataset.photoData ? photoPreview.dataset.photoData : null;
+
   try {
     // Update Firestore profile
     var perms = (_teamMembers.find(function(m){return m.uid===uid;})||{}).perms || DEFAULT_PERMS[role];
-    await saveUserProfile(uid, { name, email, role, perms });
+    var updateData = { name: name, email: email, role: role, perms: perms };
+    if (photoURL) updateData.photoURL = photoURL;
+    await saveUserProfile(uid, updateData);
 
     // Note: changing Firebase Auth email/password requires the user to be logged in
     // We store the desired password in Firestore so admin can reset it
@@ -5411,12 +5460,123 @@ function updateUserHeader() {
   var el = document.getElementById('userDisplay');
   if (!el) return;
   if (_fbUser) {
-    el.innerHTML = '<span style="font-size:11px;color:var(--gold);font-weight:700">👤 '
+    var photoHTML = (_userProfile && _userProfile.photoURL)
+      ? '<img src="'+_userProfile.photoURL+'" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;border:1px solid rgba(240,165,0,.4)">'
+      : '<span style="font-size:13px;margin-right:4px">👤</span>';
+    el.innerHTML = '<span style="font-size:11px;color:var(--gold);font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer" onclick="openMyProfile()" title="'+(lang==='es'?'Mi perfil':'My profile')+'">'+photoHTML
       + (_fbUser.displayName || _fbUser.email) + '</span>'
       + '<button onclick="logOut()" style="margin-left:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#ef4444;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">'+(lang==='es'?'Salir':'Logout')+'</button>';
   } else {
     el.innerHTML = '';
   }
+}
+
+// ── My Profile modal — any user can update their own photo ──
+function openMyProfile() {
+  if (!_fbUser) return;
+  var uid = _fbUser.uid;
+  var name = (_userProfile && _userProfile.name) || _fbUser.displayName || '';
+  var photoUrl = (_userProfile && _userProfile.photoURL) || '';
+
+  var modal = document.createElement('div');
+  modal.id = 'my-profile-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:300px;max-width:90vw';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:16px;font-weight:800;margin-bottom:16px';
+  title.textContent = (typeof lang !== 'undefined' && lang === 'es') ? '👤 Mi Perfil' : '👤 My Profile';
+  box.appendChild(title);
+
+  // Photo preview
+  var photoWrap = document.createElement('div');
+  photoWrap.style.cssText = 'text-align:center;margin-bottom:16px';
+  var photoEl = document.createElement('div');
+  photoEl.id = 'mp-photo-preview';
+  photoEl.style.cssText = 'width:80px;height:80px;border-radius:50%;margin:0 auto 8px;overflow:hidden;border:2px solid rgba(240,165,0,.4);background:rgba(240,165,0,.1);display:flex;align-items:center;justify-content:center;cursor:pointer';
+  photoEl.innerHTML = photoUrl ? '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover">' : '<span style="font-size:32px">👤</span>';
+  photoEl.onclick = function(){ document.getElementById('mp-photo-file').click(); };
+
+  var fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.id = 'mp-photo-file';
+  fileInput.accept = 'image/*'; fileInput.style.display = 'none';
+  fileInput.onchange = function() {
+    if (!this.files || !this.files[0]) return;
+    var img2 = new Image();
+    img2.onload = function() {
+      var canvas = document.createElement('canvas');
+      var MAX = 200, scale = Math.min(MAX/img2.width, MAX/img2.height, 1);
+      canvas.width = Math.round(img2.width*scale);
+      canvas.height = Math.round(img2.height*scale);
+      canvas.getContext('2d').drawImage(img2, 0, 0, canvas.width, canvas.height);
+      var data = canvas.toDataURL('image/jpeg', 0.8);
+      photoEl.innerHTML = '<img src="'+data+'" style="width:100%;height:100%;object-fit:cover">';
+      photoEl.dataset.photoData = data;
+    };
+    img2.src = URL.createObjectURL(this.files[0]);
+  };
+
+  var photoBtn = document.createElement('button');
+  photoBtn.textContent = '📷 ' + ((typeof lang !== 'undefined' && lang === 'es') ? 'Cambiar foto' : 'Change photo');
+  photoBtn.style.cssText = 'background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit';
+  photoBtn.onclick = function(){ fileInput.click(); };
+
+  photoWrap.appendChild(photoEl);
+  photoWrap.appendChild(fileInput);
+  photoWrap.appendChild(photoBtn);
+  box.appendChild(photoWrap);
+
+  // Name field
+  var nameLbl = document.createElement('label');
+  nameLbl.style.cssText = 'font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px';
+  nameLbl.textContent = (typeof lang !== 'undefined' && lang === 'es') ? 'Nombre' : 'Name';
+  var nameInput = document.createElement('input');
+  nameInput.id = 'mp-name-input';
+  nameInput.value = name;
+  nameInput.style.cssText = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:16px';
+  box.appendChild(nameLbl);
+  box.appendChild(nameInput);
+
+  // Buttons
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px';
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = (typeof lang !== 'undefined' && lang === 'es') ? '💾 Guardar' : '💾 Save';
+  saveBtn.style.cssText = 'flex:1;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,#f0a500,#d4920a);color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+  saveBtn.onclick = async function() {
+    var newName = nameInput.value.trim();
+    var newPhoto = photoEl.dataset.photoData || null;
+    if (!newName) { showToast('⚠️ Nombre requerido'); return; }
+    var updateData = { name: newName };
+    if (newPhoto) updateData.photoURL = newPhoto;
+    var fb = window._firebase;
+    try {
+      await fb.setDoc(fb.doc(_fbDb, 'users', uid), updateData, { merge: true });
+      if (_userProfile) Object.assign(_userProfile, updateData);
+      updateUserHeader();
+      // Update TC avatar
+      var tcAv = document.getElementById('tc-my-avatar');
+      if (tcAv && newPhoto) { tcAv.innerHTML = '<img src="'+newPhoto+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'; tcAv.style.background = 'none'; }
+      showToast('✅ ' + ((typeof lang !== 'undefined' && lang === 'es') ? 'Perfil actualizado' : 'Profile updated'));
+      document.body.removeChild(modal);
+    } catch(e) { showToast('❌ Error: ' + e.message); }
+  };
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = (typeof lang !== 'undefined' && lang === 'es') ? 'Cancelar' : 'Cancel';
+  cancelBtn.style.cssText = 'padding:11px 16px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit';
+  cancelBtn.onclick = function(){ document.body.removeChild(modal); };
+
+  btnRow.appendChild(saveBtn);
+  btnRow.appendChild(cancelBtn);
+  box.appendChild(btnRow);
+
+  modal.appendChild(box);
+  modal.onclick = function(e){ if(e.target===modal) document.body.removeChild(modal); };
+  document.body.appendChild(modal);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -7552,7 +7712,7 @@ var _origSetLang = typeof setLang === 'function' ? setLang : null;
 
   <!-- Mi estado -->
   <div class="tc-me-row">
-    <div class="tc-me-av" id="tc-my-avatar" style="background:linear-gradient(135deg,var(--gold),var(--gold2))">?</div>
+    <div class="tc-me-av" id="tc-my-avatar" style="background:linear-gradient(135deg,var(--gold),var(--gold2));overflow:hidden">?</div>
     <div class="tc-me-name" id="tc-my-name">Cargando...</div>
     <select class="tc-status-sel" id="tc-status-sel" onchange="if(typeof tcChangeMyStatus==='function')tcChangeMyStatus(this.value)">
       <option value="online">🟢</option>
@@ -7713,7 +7873,15 @@ function tcLoadMyProfile() {
   var color = tcColor(_fbUser.uid);
   var av = document.getElementById('tc-my-avatar');
   var nm = document.getElementById('tc-my-name');
-  if(av){ av.textContent = initials; av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)'; }
+  if(av) {
+    if(_userProfile && _userProfile.photoURL) {
+      av.innerHTML = '<img src="'+_userProfile.photoURL+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      av.style.background = 'none';
+    } else {
+      av.textContent = initials;
+      av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)';
+    }
+  }
   if(nm) nm.textContent = name;
 }
 
@@ -7802,8 +7970,14 @@ function tcRenderAgentsList() {
 
     var av = document.createElement('div');
     av.className = 'tc-av';
-    av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)';
-    av.innerHTML = initials + '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span>';
+    if (ag.photoURL) {
+      av.style.background = 'none';
+      av.style.overflow = 'hidden';
+      av.innerHTML = '<img src="'+ag.photoURL+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%"><span class="tc-dot '+tcStatusClass(ag.status)+'"></span>';
+    } else {
+      av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)';
+      av.innerHTML = initials + '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span>';
+    }
 
     var info = document.createElement('div');
     info.className = 'tc-ag-info';
@@ -7872,8 +8046,14 @@ function tcOpenChat(uid, el) {
 
   // Update chat header
   var av = document.getElementById('tc-chat-avatar');
-  av.textContent = initials;
-  av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)';
+  if (ag.photoURL) {
+    av.innerHTML = '<img src="'+ag.photoURL+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    av.style.background = 'none';
+    av.style.overflow = 'hidden';
+  } else {
+    av.textContent = initials;
+    av.style.background = 'linear-gradient(135deg,'+color+','+color+'aa)';
+  }
   document.getElementById('tc-chat-name').textContent = ag.name;
   document.getElementById('tc-chat-substatus').textContent = tcStatusLabel(ag.status);
 
