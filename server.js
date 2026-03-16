@@ -289,28 +289,22 @@ DLCR phone: ${TWILIO_PHONE_NUMBER}`,
 //  SERVE index.html  — CRM Frontend
 // ═══════════════════════════════════════════════════════════
 const path = require('path');
+const fs   = require('fs');
 
-// Serve static files (index.html, icons, etc.)
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files from root directory
+app.use(express.static(path.join(__dirname)));
 
 // Root → serve the CRM
 app.get('/', (req, res) => {
-  const indexPath = path.join(__dirname, 'public', 'index.html');
-  const fs = require('fs');
+  const indexPath = path.join(__dirname, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    // Fallback if public folder not set up yet
-    res.json({
-      status:  'Jarvis DLCR Server — Online ✅',
-      version: '2.0.0',
-      features: ['Claude AI', 'ElevenLabs TTS', 'Twilio SMS', 'Twilio Calls'],
-      note:    'index.html not found in /public folder'
-    });
+    res.json({ status: 'Jarvis DLCR Server — Online ✅', version: '2.0.0' });
   }
 });
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', version: '2.0.0' });
 });
