@@ -7247,6 +7247,18 @@ var _origSetLang = typeof setLang === 'function' ? setLang : null;
   <div class="tc-panel-hdr">
     <span style="font-size:14px">💬</span>
     <div class="tc-panel-title">Team Chat</div>
+    <button onclick="tcToggleBroadcast()" id="tc-broadcast-btn" title="Mensaje a todos" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📢 Todos</button>
+  </div>
+
+  <!-- Broadcast panel -->
+  <div id="tc-broadcast-panel" style="display:none;padding:8px 10px;border-bottom:1px solid var(--border);background:rgba(240,165,0,.05);">
+    <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📢 Mensaje a todo el equipo</div>
+    <textarea id="tc-broadcast-input" placeholder="Escribe el mensaje para todos..." style="width:100%;background:var(--card);border:1px solid rgba(240,165,0,.3);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;resize:none;height:60px;box-sizing:border-box;margin-bottom:6px"></textarea>
+    <div style="display:flex;gap:6px">
+      <button onclick="tcSendBroadcast()" style="flex:1;background:linear-gradient(135deg,var(--gold),#d4920a);border:none;color:#000;font-weight:800;font-size:12px;padding:7px;border-radius:7px;cursor:pointer;font-family:inherit">📢 Enviar a todos</button>
+      <button onclick="tcToggleBroadcast()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:7px 10px;border-radius:7px;cursor:pointer;font-family:inherit">✕</button>
+    </div>
+    <div id="tc-broadcast-status" style="font-size:10px;color:var(--muted);margin-top:4px;min-height:14px"></div>
   </div>
 
   <!-- Mi estado -->
@@ -7723,6 +7735,78 @@ function tcCloseChat() {
 function tcAutoResize2(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 80)+'px';
+}
+
+
+// ── Toggle broadcast panel ──
+function tcToggleBroadcast() {
+  var panel = document.getElementById('tc-broadcast-panel');
+  if(!panel) return;
+  var isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if(!isOpen) {
+    var inp = document.getElementById('tc-broadcast-input');
+    if(inp) { inp.value = ''; inp.focus(); }
+    var st = document.getElementById('tc-broadcast-status');
+    if(st) st.textContent = '';
+  }
+}
+
+// ── Send broadcast to all agents ──
+async function tcSendBroadcast() {
+  var inp = document.getElementById('tc-broadcast-input');
+  var st  = document.getElementById('tc-broadcast-status');
+  var text = inp ? inp.value.trim() : '';
+  if(!text) { if(st) st.textContent = '⚠️ Escribe un mensaje primero'; return; }
+  if(!_fbDb || !_fbUser) { if(st) st.textContent = '⚠️ Sin conexión'; return; }
+
+  var agents = Object.keys(_tcAgentsData);
+  if(!agents.length) { if(st) st.textContent = '⚠️ No hay agentes en el equipo'; return; }
+
+  var fb = window._firebase;
+  var myName = (_userProfile&&_userProfile.name) || _fbUser.displayName || _fbUser.email || 'Jefe';
+  var sent = 0;
+  var ts = Date.now();
+
+  if(st) st.textContent = 'Enviando...';
+
+  // Send to each agent individually
+  for(var i = 0; i < agents.length; i++) {
+    var uid = agents[i];
+    try {
+      var roomId = tcRoomId(_fbUser.uid, uid);
+      var msg = {
+        from: _fbUser.uid,
+        to: uid,
+        name: myName,
+        text: '📢 ' + text,
+        ts: ts + i,
+        read: false,
+        broadcast: true
+      };
+      await fb.addDoc(fb.collection(_fbDb,'chats',roomId,'messages'), msg);
+      await fb.setDoc(fb.doc(_fbDb,'chats',roomId),{
+        lastMsg: '📢 ' + text,
+        lastTs: msg.ts,
+        participants: [_fbUser.uid, uid]
+      },{merge:true});
+      // Notification
+      await fb.setDoc(fb.doc(_fbDb,'notifications',uid+'_'+_fbUser.uid),{
+        from: _fbUser.uid,
+        fromName: myName,
+        text: '📢 ' + text,
+        ts: msg.ts,
+        read: false
+      },{merge:true});
+      sent++;
+    } catch(e) { console.warn('Broadcast error to', uid, e); }
+  }
+
+  if(inp) inp.value = '';
+  if(st) st.textContent = '✅ Enviado a ' + sent + ' agente' + (sent!==1?'s':'');
+  setTimeout(function() {
+    tcToggleBroadcast();
+  }, 2000);
 }
 
 // ── Auto-init Team Chat — waits for Firebase auth ──
