@@ -1915,6 +1915,13 @@ async function loadAll() {
   }
   renderAll();
   try { renderTitleCompanies(); } catch(ex) {}
+  // Greeting fires here — all data loaded, user confirmed
+  setTimeout(function() {
+    var bbl = document.getElementById('jvWelcomeBbl');
+    if (bbl && typeof jvBuildGreeting === 'function') {
+      bbl.innerHTML = jvBuildGreeting();
+    }
+  }, 100);
 }
 
 function loadFromLocal() {
