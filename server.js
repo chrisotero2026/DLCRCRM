@@ -16,6 +16,7 @@ app.get('/', (req, res) => {
 
 // ══════════════════════════════════════════════════════
 //  /api/jarvis/claude  — Proxy to Anthropic (fixes CORS)
+//  Includes web_search tool for real-time news access
 // ══════════════════════════════════════════════════════
 app.post('/api/jarvis/claude', async (req, res) => {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
@@ -36,7 +37,13 @@ app.post('/api/jarvis/claude', async (req, res) => {
   const payload = JSON.stringify({
     model:      'claude-sonnet-4-20250514',
     max_tokens: 1500,
-    system:     system || 'Eres Jarvis, asistente de DLCR Real Estate & Loans.',
+    system:     system || 'You are Jarvis, assistant for DLCR Real Estate & Loans.',
+    tools: [
+      {
+        type: 'web_search_20250305',
+        name: 'web_search'
+      }
+    ],
     messages:   messages
   });
 
@@ -45,10 +52,11 @@ app.post('/api/jarvis/claude', async (req, res) => {
     path:     '/v1/messages',
     method:   'POST',
     headers: {
-      'Content-Type':      'application/json',
-      'x-api-key':         ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Length':    Buffer.byteLength(payload)
+      'Content-Type':           'application/json',
+      'x-api-key':              ANTHROPIC_KEY,
+      'anthropic-version':      '2023-06-01',
+      'anthropic-beta':         'web-search-2025-03-05',
+      'Content-Length':         Buffer.byteLength(payload)
     }
   };
 
@@ -60,8 +68,21 @@ app.post('/api/jarvis/claude', async (req, res) => {
         resp.on('end', () => {
           try {
             const parsed = JSON.parse(data);
-            if (parsed.content && parsed.content[0]) {
-              resolve({ content: parsed.content[0].text });
+            // Handle tool use — concatenate all text blocks
+            if (parsed.content && Array.isArray(parsed.content)) {
+              const textBlocks = parsed.content
+                .filter(b => b.type === 'text')
+                .map(b => b.text)
+                .join('\n');
+              if (textBlocks) {
+                resolve({ content: textBlocks });
+              } else if (parsed.error) {
+                reject(new Error(parsed.error.message || 'Anthropic error'));
+              } else {
+                // Maybe only tool_use blocks returned — try to get any text
+                const anyText = parsed.content.find(b => b.text);
+                resolve({ content: anyText ? anyText.text : 'Búsqueda completada.' });
+              }
             } else if (parsed.error) {
               reject(new Error(parsed.error.message || 'Anthropic error'));
             } else {
@@ -73,7 +94,7 @@ app.post('/api/jarvis/claude', async (req, res) => {
         });
       });
       reqAnth.on('error', reject);
-      reqAnth.setTimeout(40000, () => { reqAnth.destroy(); reject(new Error('Timeout')); });
+      reqAnth.setTimeout(60000, () => { reqAnth.destroy(); reject(new Error('Timeout')); });
       reqAnth.write(payload);
       reqAnth.end();
     });
