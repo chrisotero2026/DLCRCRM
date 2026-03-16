@@ -7786,27 +7786,45 @@ function tcRenderAgentsList() {
     var unread   = _tcUnreadCounts[ag.uid]||0;
     var isActive = _tcCurrentChat === ag.uid ? ' active' : '';
     var isFav    = _tcFavorites.indexOf(ag.uid) > -1;
-    var h = '<div class="tc-panel-agent'+isActive+'" onclick="tcOpenChat(''+ag.uid+'',this)">';
-    h += '<div class="tc-av" style="background:linear-gradient(135deg,'+color+','+color+'aa)">'+initials;
-    h += '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span></div>';
-    h += '<div class="tc-ag-info"><div class="tc-ag-name">'+escHtml(ag.name)+'</div>';
-    h += '<div class="tc-ag-st">'+tcStatusLabel(ag.status)+'</div></div>';
-    if(unread>0) h += '<div class="tc-unread">'+unread+'</div>';
-    h += '<button onclick="tcToggleFav(''+ag.uid+'',event)" title="'+(isFav?(isES?'Quitar de favoritos':'Unpin'):(isES?'Fijar arriba':'Pin'))+'" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;opacity:'+(isFav?'1':'.3')+';transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=''+(isFav?'1':'.3')+''">📌</button>';
-    h += '</div>';
-    return h;
+    var favTip   = isFav ? (isES ? 'Quitar de favoritos' : 'Unpin') : (isES ? 'Fijar arriba' : 'Pin');
+    var favOp    = isFav ? '1' : '.35';
+    var d = document.createElement('div');
+    d.className = 'tc-panel-agent' + isActive;
+    d.dataset.uid = ag.uid;
+    d.addEventListener('click', function(){ tcOpenChat(ag.uid, d); });
+    d.innerHTML =
+      '<div class="tc-av" style="background:linear-gradient(135deg,'+color+','+color+'aa)">'+initials+
+      '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span></div>'+
+      '<div class="tc-ag-info"><div class="tc-ag-name">'+escHtml(ag.name)+'</div>'+
+      '<div class="tc-ag-st">'+tcStatusLabel(ag.status)+'</div></div>'+
+      (unread>0 ? '<div class="tc-unread">'+unread+'</div>' : '')+
+      '<button class="tc-fav-btn" data-fuid="'+ag.uid+'" title="'+favTip+'" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 4px;opacity:'+favOp+';transition:.2s">📌</button>';
+    d.querySelector('.tc-fav-btn').addEventListener('click', function(ev){
+      ev.stopPropagation(); tcToggleFav(ag.uid);
+    });
+    return d;
   }
 
-  var html = '';
+
+  // Build list using DOM (no innerHTML string concat for agents)
+  list.innerHTML = '';
   if(favs.length > 0) {
-    html += '<div class="tc-sec-lbl">'+(isES?'Frecuentes':'Pinned')+'</div>';
-    favs.forEach(function(ag){ html += renderAgent(ag); });
-    html += '<div class="tc-sec-lbl">'+(isES?'Equipo ('+rest.length+')':'Team ('+rest.length+')')+'</div>';
+    var lf = document.createElement('div');
+    lf.className = 'tc-sec-lbl';
+    lf.textContent = isES ? 'Frecuentes' : 'Pinned';
+    list.appendChild(lf);
+    favs.forEach(function(ag){ list.appendChild(renderAgent(ag)); });
+    var lr = document.createElement('div');
+    lr.className = 'tc-sec-lbl';
+    lr.textContent = isES ? 'Equipo (' + rest.length + ')' : 'Team (' + rest.length + ')';
+    list.appendChild(lr);
   } else {
-    html += '<div class="tc-sec-lbl">'+(isES?'Equipo ('+agents.length+')':'Team ('+agents.length+')')+'</div>';
+    var la = document.createElement('div');
+    la.className = 'tc-sec-lbl';
+    la.textContent = isES ? 'Equipo (' + agents.length + ')' : 'Team (' + agents.length + ')';
+    list.appendChild(la);
   }
-  rest.forEach(function(ag){ html += renderAgent(ag); });
-  list.innerHTML = html;
+  rest.forEach(function(ag){ list.appendChild(renderAgent(ag)); });
 }
 // ── Open chat with agent ──
 function tcOpenChat(uid, el) {
