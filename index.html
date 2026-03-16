@@ -2459,6 +2459,23 @@ function setFolder(uid) {
   renderClients();
 }
 
+function updateNavCounts(){
+  if(typeof clients==='undefined') return;
+  var open=clients.filter(function(c){return c.stage!=='closed';});
+  var closed=clients.filter(function(c){return c.stage==='closed';});
+  var counts={all:open.length,buy:0,refi:0,sell:0,buysell:0,loan:0};
+  open.forEach(function(c){if(counts[c.type]!==undefined)counts[c.type]++;});
+  Object.keys(counts).forEach(function(k){
+    var el=document.getElementById('cnt-'+k);
+    if(el){el.textContent=counts[k];el.style.display=counts[k]?'':'none';}
+  });
+  var hot=open.filter(function(c){return c.temp==='hot';}).length;
+  var warm=open.filter(function(c){return c.temp==='warm';}).length;
+  var cold=open.filter(function(c){return c.temp==='cold';}).length;
+  var setS=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
+  setS('statHotSide',hot); setS('statWarmSide',warm); setS('statColdSide',cold);
+  setS('statTotalSide',open.length); setS('statClosedSide',closed.length);
+}
 function renderClients(){ updateNavCounts();
   const grid=document.getElementById('clientCards');
   const q=document.getElementById('searchInput').value.toLowerCase();
