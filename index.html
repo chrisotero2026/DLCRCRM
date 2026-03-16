@@ -7,6 +7,7 @@
 
 <!-- ═══ PWA META TAGS ═══ -->
 <link rel="manifest" href="/manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <meta name="theme-color" content="#f0a500">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -904,6 +905,7 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 <div class="tabs">
   <div class="tab active" id="tab-clients" onclick="switchTab('clients')">👥 <span id="lbl-clients">Clientes</span></div>
   <div class="tab" id="tab-pipeline" onclick="switchTab('pipeline')">📊 Pipeline</div>
+  <div class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📈 <span id="lbl-dashboard">Dashboard</span></div>
 
   <div class="tab" id="tab-team" onclick="switchTab('team')">👥 <span id="lbl-team">Equipo</span></div>
   <div class="tab" id="tab-income" onclick="switchTab('income')">📈 <span id="lbl-income">Ingresos</span></div>
@@ -982,6 +984,85 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
     <!-- ═══ VIEW: COMMISSION ═══ -->
     <div class="view" id="view-team">
       <div id="view-team-inner"></div>
+    </div>
+
+
+    <!-- ═══ VIEW: DASHBOARD ═══ -->
+    <div class="view" id="view-dashboard">
+      <style>
+        .dash-wrap{padding:16px;overflow-y:auto;height:100%;}
+        .dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+        .dash-title{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;}
+        .dash-period{display:flex;gap:6px;}
+        .dash-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;}
+        .dash-btn.active{background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;border-color:var(--gold);font-weight:700;}
+        .dash-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+        .dash-kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;}
+        .dash-kpi-val{font-size:24px;font-weight:800;color:var(--gold);margin-bottom:4px;}
+        .dash-kpi-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+        .dash-kpi-sub{font-size:12px;color:var(--text);margin-top:4px;}
+        .dash-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+        .dash-chart-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;}
+        .dash-chart-title{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--text);}
+        .dash-chart-full{grid-column:1/-1;}
+        canvas{max-height:220px;}
+        .dash-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .dash-table th{text-align:left;padding:8px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);}
+        .dash-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text);}
+        .dash-table tr:last-child td{border-bottom:none;}
+        .dash-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+        .dash-bar-lbl{font-size:12px;color:var(--text);min-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .dash-bar-track{flex:1;height:14px;background:var(--card2);border-radius:7px;overflow:hidden;}
+        .dash-bar-fill{height:100%;border-radius:7px;background:linear-gradient(90deg,var(--gold),#d4920a);transition:width .6s ease;}
+        .dash-bar-val{font-size:11px;color:var(--muted);min-width:40px;text-align:right;}
+        .no-data{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
+      </style>
+      <div class="dash-wrap" id="dash-wrap">
+        <div class="dash-header">
+          <div class="dash-title">📊 Dashboard</div>
+          <div class="dash-period">
+            <button class="dash-btn active" id="dash-p-month" onclick="setDashPeriod('month',this)">Este mes</button>
+            <button class="dash-btn" id="dash-p-quarter" onclick="setDashPeriod('quarter',this)">Trimestre</button>
+            <button class="dash-btn" id="dash-p-year" onclick="setDashPeriod('year',this)">Este año</button>
+            <button class="dash-btn" id="dash-p-all" onclick="setDashPeriod('all',this)">Todo</button>
+          </div>
+        </div>
+        <!-- KPIs -->
+        <div class="dash-kpis" id="dash-kpis"></div>
+        <!-- Charts row 1 -->
+        <div class="dash-charts" id="dash-charts-1">
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">💰 Ingresos vs Meta mensual</div>
+            <canvas id="dash-chart-income"></canvas>
+          </div>
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">🎯 Conversión por etapa</div>
+            <canvas id="dash-chart-funnel"></canvas>
+          </div>
+        </div>
+        <!-- Charts row 2 -->
+        <div class="dash-charts" id="dash-charts-2">
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">👤 Rendimiento por agente</div>
+            <div id="dash-agent-bars"></div>
+          </div>
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">🏷️ Leads por tipo</div>
+            <canvas id="dash-chart-type"></canvas>
+          </div>
+        </div>
+        <!-- Charts row 3 -->
+        <div class="dash-charts">
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">⏱️ Tiempo promedio de cierre (días)</div>
+            <div id="dash-close-time"></div>
+          </div>
+          <div class="dash-chart-box">
+            <div class="dash-chart-title">🔥 Top clientes calientes</div>
+            <div id="dash-hot-list"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="view" id="view-income">
@@ -2100,6 +2181,7 @@ function renderAll(){
     const id=active.id;
     if(id==='view-pipeline') renderPipeline();
     if(id==='view-income')   renderIncome();
+    if(id==='view-dashboard') renderDashboard();
     if(id==='view-table')    renderTable();
     if(id==='view-team')     { try{renderAdminPanel();}catch(ex){} }
   }
@@ -4323,6 +4405,7 @@ function applyTabPermissions() {
     'tab-clients':  'clients',
     'tab-pipeline': 'pipeline',
     'tab-income':   'income',
+    'tab-dashboard': 'dashboard',
     'tab-table':    'table',
     'tab-mort':     'mortgage',
     'tab-team':     'team',
@@ -7870,6 +7953,207 @@ async function tcSendBroadcast() {
 
 
 <script>
+
+
+// ══════════════════════════════════════════════════════════════
+//  DASHBOARD MODULE — Métricas visuales
+// ══════════════════════════════════════════════════════════════
+
+var _dashPeriod = 'month';
+var _dashCharts = {};
+
+function setDashPeriod(p, btn) {
+  _dashPeriod = p;
+  document.querySelectorAll('.dash-btn').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  renderDashboard();
+}
+
+function dashFilterByPeriod(arr, dateField) {
+  var now = new Date();
+  var start;
+  if(_dashPeriod === 'month')   { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+  else if(_dashPeriod === 'quarter') { start = new Date(now.getFullYear(), Math.floor(now.getMonth()/3)*3, 1); }
+  else if(_dashPeriod === 'year')    { start = new Date(now.getFullYear(), 0, 1); }
+  else return arr;
+  return arr.filter(function(x){ return x[dateField] && new Date(x[dateField]) >= start; });
+}
+
+function dashDestroyChart(id) {
+  if(_dashCharts[id]) { try{ _dashCharts[id].destroy(); }catch(e){} delete _dashCharts[id]; }
+}
+
+function renderDashboard() {
+  if(typeof clients === 'undefined') return;
+  var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+
+  // Filter data by period
+  var allClients  = clients || [];
+  var allIncome   = (typeof incomeTxs !== 'undefined') ? incomeTxs : [];
+  var filtIncome  = dashFilterByPeriod(allIncome, 'date');
+  var filtClients = dashFilterByPeriod(allClients, 'created').map(function(c){ return new Date(c.created); });
+
+  // ── KPIs ──
+  var totalInc    = filtIncome.reduce(function(s,t){ return s+(t.amount||0); }, 0);
+  var closedPer   = allClients.filter(function(c){ return c.stage==='closed'; }).length;
+  var hotCount    = allClients.filter(function(c){ return c.temp==='hot' && c.stage!=='closed'; }).length;
+  var convRate    = allClients.length > 0 ? Math.round((closedPer/allClients.length)*100) : 0;
+  var metaMensual = 15000;
+
+  var kpiEl = document.getElementById('dash-kpis');
+  if(kpiEl) kpiEl.innerHTML =
+    dashKpi(isES?'Ingresos':'Revenue', '$'+totalInc.toLocaleString(), totalInc>=metaMensual?'✅ Meta alcanzada':'🎯 Meta: $'+metaMensual.toLocaleString()) +
+    dashKpi(isES?'Cierres':'Closings', closedPer, isES?'Clientes cerrados':'Closed clients') +
+    dashKpi(isES?'Tasa conversión':'Conv. rate', convRate+'%', isES?'Leads → Cierre':'Leads → Close') +
+    dashKpi(isES?'Calientes activos':'Hot leads', hotCount, isES?'Necesitan follow-up':'Need follow-up');
+
+  // ── Chart 1: Ingresos por mes vs meta ──
+  dashDestroyChart('income');
+  var monthLabels = [], monthData = [], monthMeta = [];
+  var now = new Date();
+  for(var m=5; m>=0; m--) {
+    var d = new Date(now.getFullYear(), now.getMonth()-m, 1);
+    var lbl = d.toLocaleDateString(isES?'es':'en', {month:'short'});
+    monthLabels.push(lbl);
+    var total = allIncome.filter(function(t){
+      var td = new Date(t.date);
+      return td.getFullYear()===d.getFullYear() && td.getMonth()===d.getMonth();
+    }).reduce(function(s,t){ return s+(t.amount||0); }, 0);
+    monthData.push(total);
+    monthMeta.push(metaMensual);
+  }
+  var ctx1 = document.getElementById('dash-chart-income');
+  if(ctx1) {
+    _dashCharts['income'] = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: monthLabels,
+        datasets: [
+          { label: isES?'Ingresos':'Revenue', data: monthData, backgroundColor: 'rgba(240,165,0,0.7)', borderColor: '#f0a500', borderWidth: 1, borderRadius: 6 },
+          { label: isES?'Meta':'Goal', data: monthMeta, type: 'line', borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, fill: false, tension: 0 }
+        ]
+      },
+      options: { responsive:true, plugins:{ legend:{labels:{color:'#94a3b8',font:{size:11}}} }, scales:{ x:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.05)'}}, y:{ticks:{color:'#64748b',callback:function(v){return '$'+v.toLocaleString();}},grid:{color:'rgba(255,255,255,.05)'}} } }
+    });
+  }
+
+  // ── Chart 2: Funnel de etapas ──
+  dashDestroyChart('funnel');
+  var stages = ['lead','contacted','qualified','negotiation','contract','closed'];
+  var stageLbls = isES ? ['Lead','Contactado','Calificado','Negociación','Contrato','Cerrado'] : ['Lead','Contacted','Qualified','Negotiation','Contract','Closed'];
+  var stageData = stages.map(function(s){ return allClients.filter(function(c){ return c.stage===s; }).length; });
+  var ctx2 = document.getElementById('dash-chart-funnel');
+  if(ctx2) {
+    _dashCharts['funnel'] = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: stageLbls,
+        datasets: [{ label: isES?'Clientes':'Clients', data: stageData, backgroundColor: ['#4a85f5','#a855f7','#14b8a6','#f59e0b','#f0a500','#22c55e'], borderRadius: 6 }]
+      },
+      options: { responsive:true, plugins:{ legend:{display:false} }, scales:{ x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'rgba(255,255,255,.05)'}}, y:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.05)'}} } }
+    });
+  }
+
+  // ── Chart 3: Rendimiento por agente (barras horizontales) ──
+  var agentMap = {};
+  allClients.forEach(function(c){
+    var name = c.ownedByName || 'Sin asignar';
+    if(!agentMap[name]) agentMap[name] = { total:0, closed:0, income:0 };
+    agentMap[name].total++;
+    if(c.stage==='closed') agentMap[name].closed++;
+  });
+  allIncome.forEach(function(t){
+    // match by agent - approximate
+    var name = t.agentName || 'Sin asignar';
+    if(!agentMap[name]) agentMap[name] = { total:0, closed:0, income:0 };
+    agentMap[name].income += (t.amount||0);
+  });
+  var agents = Object.entries(agentMap).sort(function(a,b){ return b[1].closed - a[1].closed; }).slice(0,6);
+  var maxClosed = Math.max.apply(null, agents.map(function(a){ return a[1].closed; })) || 1;
+  var agentEl = document.getElementById('dash-agent-bars');
+  if(agentEl) {
+    agentEl.innerHTML = agents.length === 0
+      ? '<div class="no-data">Sin datos de agentes</div>'
+      : agents.map(function(a){
+          var pct = Math.round((a[1].closed/maxClosed)*100);
+          return '<div class="dash-bar-row"><div class="dash-bar-lbl" title="'+a[0]+'">'+a[0].split(' ')[0]+'</div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:'+pct+'%"></div></div><div class="dash-bar-val">'+a[1].closed+' cierre'+(a[1].closed!==1?'s':'')+'</div></div>';
+        }).join('');
+  }
+
+  // ── Chart 4: Leads por tipo ──
+  dashDestroyChart('type');
+  var typeMap = { buy:0, sell:0, refi:0, buysell:0, loan:0, referral:0 };
+  allClients.forEach(function(c){ if(typeMap[c.type]!==undefined) typeMap[c.type]++; });
+  var typeLabels = isES ? ['Compra','Venta','Refinance','Venta/Compra','Préstamo','Referido'] : ['Buy','Sell','Refi','Buy/Sell','Loan','Referral'];
+  var typeVals   = Object.values(typeMap);
+  var ctx4 = document.getElementById('dash-chart-type');
+  if(ctx4) {
+    _dashCharts['type'] = new Chart(ctx4, {
+      type: 'doughnut',
+      data: {
+        labels: typeLabels,
+        datasets: [{ data: typeVals, backgroundColor: ['#4a85f5','#22c55e','#f59e0b','#a855f7','#f0a500','#14b8a6'], borderWidth: 0 }]
+      },
+      options: { responsive:true, plugins:{ legend:{position:'right',labels:{color:'#94a3b8',font:{size:10},boxWidth:12}} }, cutout:'60%' }
+    });
+  }
+
+  // ── Tiempo promedio de cierre ──
+  var closedWithDates = allClients.filter(function(c){
+    return c.stage==='closed' && c.created && c.closeDate;
+  });
+  var closeEl = document.getElementById('dash-close-time');
+  if(closeEl) {
+    if(!closedWithDates.length) {
+      closeEl.innerHTML = '<div class="no-data">Sin cierres con fechas registradas</div>';
+    } else {
+      var avgDays = Math.round(closedWithDates.reduce(function(s,c){
+        var d1 = new Date(c.created), d2 = new Date(c.closeDate);
+        return s + (d2-d1)/86400000;
+      }, 0) / closedWithDates.length);
+      var byType = {};
+      closedWithDates.forEach(function(c){
+        var days = Math.round((new Date(c.closeDate)-new Date(c.created))/86400000);
+        if(!byType[c.type]) byType[c.type] = { total:0, count:0 };
+        byType[c.type].total += days;
+        byType[c.type].count++;
+      });
+      var typeNameMap = {buy:'Compra',sell:'Venta',refi:'Refinance',buysell:'Venta/Compra',loan:'Préstamo',referral:'Referido'};
+      var maxDays = Math.max.apply(null, Object.values(byType).map(function(v){ return v.total/v.count; })) || 1;
+      closeEl.innerHTML = '<div style="font-size:22px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:12px">'+avgDays+' <span style="font-size:13px;font-weight:400;color:var(--muted)">días promedio</span></div>' +
+        Object.entries(byType).map(function(e){
+          var avg = Math.round(e[1].total/e[1].count);
+          var pct = Math.round((avg/maxDays)*100);
+          return '<div class="dash-bar-row"><div class="dash-bar-lbl">'+(typeNameMap[e[0]]||e[0])+'</div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#4a85f5,#2d6cdf)"></div></div><div class="dash-bar-val">'+avg+'d</div></div>';
+        }).join('');
+    }
+  }
+
+  // ── Top clientes calientes ──
+  var hotEl = document.getElementById('dash-hot-list');
+  if(hotEl) {
+    var hot = allClients.filter(function(c){ return c.temp==='hot' && c.stage!=='closed'; })
+      .sort(function(a,b){ return (a.nextCall||'zzz').localeCompare(b.nextCall||'zzz'); })
+      .slice(0,6);
+    if(!hot.length) {
+      hotEl.innerHTML = '<div class="no-data">Sin clientes calientes activos</div>';
+    } else {
+      hotEl.innerHTML = '<table class="dash-table"><thead><tr><th>Cliente</th><th>Etapa</th><th>Próx. llamada</th></tr></thead><tbody>' +
+        hot.map(function(c){
+          var today = new Date().toISOString().split('T')[0];
+          var isOver = c.nextCall && c.nextCall < today;
+          return '<tr><td>'+c.name+'</td><td>'+c.stage+'</td><td style="color:'+(isOver?'#ef4444':c.nextCall?'#22c55e':'var(--muted)')+'">'+
+            (c.nextCall ? (isOver?'⚠️ ':'')+c.nextCall : '—')+'</td></tr>';
+        }).join('') +
+        '</tbody></table>';
+    }
+  }
+}
+
+function dashKpi(label, value, sub) {
+  return '<div class="dash-kpi"><div class="dash-kpi-val">'+value+'</div><div class="dash-kpi-lbl">'+label+'</div><div class="dash-kpi-sub">'+sub+'</div></div>';
+}
+
 
 // ══════════════════════════════════════════════════════════════
 //  JARVIS AUTO ENGINE — Seguimiento automático de leads
