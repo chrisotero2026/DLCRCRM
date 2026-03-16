@@ -7836,13 +7836,17 @@ function tcRenderAgentsList() {
 // ── Open chat with agent ──
 function tcOpenChat(uid, el) {
   _tcCurrentChat = uid;
-  // Mark active
+  // Mark active - update manually without re-rendering the whole list
   document.querySelectorAll('.tc-panel-agent').forEach(function(x){ x.classList.remove('active'); });
-  if(el) el.classList.add('active');
+  // Find the agent div by uid
+  var agDiv = el || document.querySelector('.tc-panel-agent[data-uid="'+uid+'"]');
+  if(agDiv) agDiv.classList.add('active');
   // Clear unread
   _tcUnreadCounts[uid] = 0;
   tcUpdateTotalBadge();
-  tcRenderAgentsList();
+  // Update unread badge only (no full re-render - that destroys event listeners)
+  var unreadBadge = agDiv ? agDiv.querySelector('.tc-unread') : null;
+  if(unreadBadge) unreadBadge.remove();
 
   var ag = _tcAgentsData[uid];
   if(!ag) return;
@@ -8176,15 +8180,18 @@ async function tcSendBroadcast() {
             console.log('[Jarvis] Memoria Firebase cargada ✅');
             if(typeof jvRenderMem === 'function') jvRenderMem();
             var bbl = document.getElementById('jvWelcomeBbl');
-            if(bbl && typeof jvBuildGreeting === 'function') {
-              bbl.innerHTML = jvBuildGreeting();
+            // Fire greeting now that Firebase + user + clients are loaded
+            function _refreshGreeting() {
+              var bbl = document.getElementById('jvWelcomeBbl');
+              if(bbl && typeof jvBuildGreeting === 'function') bbl.innerHTML = jvBuildGreeting();
+              var tcT = document.getElementById('tc-panel-title');
+              if(tcT && typeof lang !== 'undefined') tcT.textContent = lang==='es' ? 'Chat Equipo' : 'Team Chat';
             }
-            // Also update title bilingual
-            var tcT = document.getElementById('tc-panel-title');
-            if(tcT && typeof lang !== 'undefined') tcT.textContent = lang==='es' ? 'Chat Equipo' : 'Team Chat';
+            _refreshGreeting();
+            // Also fire after clients load (slight delay)
+            setTimeout(_refreshGreeting, 800);
           }).catch(function(e){
             console.warn('[Jarvis Memory] Load error:', e);
-            // Still show greeting even if memory fails
             var bbl2 = document.getElementById('jvWelcomeBbl');
             if(bbl2 && typeof jvBuildGreeting === 'function') bbl2.innerHTML = jvBuildGreeting();
           });
