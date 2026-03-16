@@ -6271,11 +6271,11 @@ function calRenderWeek(body) {
         return e.time ? parseInt(e.time.split(':')[0]) === hr : hr === 9;
       });
       var isNow = calDateStr(now) === ds2 && now.getHours() === hr;
-      h += '<div class="cal-week-col" onclick="calDayClick('' + ds2 + '')">';
+      h += '<div class="cal-week-col" onclick="calDayClick(\'' + ds2 + '\')">';
       if (isNow) h += '<div style="height:2px;background:var(--gold);width:100%;border-radius:2px;margin-bottom:2px"></div>';
       slotEvs.forEach(function(e) {
         var icon = calEventIcon(e.eventType);
-        h += '<div class="cal-event" style="background:' + e.color + '25;color:' + e.color + ';border-left:3px solid ' + e.color + '" onclick="event.stopPropagation();calShowEvent('' + e.id + '')" title="' + e.title + '">' + icon + ' ' + (e.time?e.time.substring(0,5)+' ':'') + e.title + '</div>';
+        h += '<div class="cal-event" style="background:' + e.color + '25;color:' + e.color + ';border-left:3px solid ' + e.color + '" onclick="event.stopPropagation();calShowEvent(\'' + e.id + '\')" title="' + e.title + '">' + icon + ' ' + (e.time?e.time.substring(0,5)+' ':'') + e.title + '</div>';
       });
       h += '</div>';
     }
