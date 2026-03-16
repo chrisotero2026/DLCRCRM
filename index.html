@@ -6302,7 +6302,7 @@ function calRenderDay(body) {
     h += '<div class="cal-day-slot-events">';
     slotEvs.forEach(function(e) {
       var icon = calEventIcon(e.eventType);
-      h += '<div class="cal-event-card" style="border-left-color:' + e.color + ';background:' + e.color + '15" onclick="calShowEvent('' + e.id + '')">';
+      h += '<div class="cal-event-card" style="border-left-color:' + e.color + ';background:' + e.color + '15" onclick="calShowEvent(\'' + e.id + '\')">';
       h += '<div style="font-weight:800;font-size:13px;display:flex;align-items:center;gap:5px">' + icon + ' ' + e.title + '</div>';
       if (e.time) h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">⏰ ' + e.time + '</div>';
       if (e.agent) h += '<div style="font-size:11px;color:var(--muted)">👤 ' + e.agent + '</div>';
@@ -6310,7 +6310,7 @@ function calRenderDay(body) {
       if (e.type==='nextcall') h += '<div style="font-size:10px;padding:2px 7px;border-radius:10px;background:' + e.color + '20;color:' + e.color + ';display:inline-block;margin-top:4px;font-weight:700">📅 Próxima llamada</div>';
       h += '</div>';
     });
-    if (!slotEvs.length) h += '<div style="width:100%;height:58px;border-radius:6px;cursor:pointer" onclick="calAddEventAtTime('' + ds + '',' + hr + ')"></div>';
+    if (!slotEvs.length) h += '<div style="width:100%;height:58px;border-radius:6px;cursor:pointer" onclick="calAddEventAtTime(\'' + ds + '\',' + hr + ')"></div>';
     h += '</div></div>';
   });
   h += '</div>';
