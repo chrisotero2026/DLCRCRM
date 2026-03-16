@@ -2105,6 +2105,8 @@ function setLang(l){
   var bbl = document.getElementById('jvWelcomeBbl');
   if (bbl) {
     if(typeof jvBuildGreeting==='function'){var bbl2=document.getElementById('jvWelcomeBbl');if(bbl2)bbl2.innerHTML=jvBuildGreeting();}
+    var tcTitle = document.getElementById('tc-panel-title');
+    if(tcTitle) tcTitle.textContent = l==='es' ? 'Chat Equipo' : 'Team Chat';
     var greeting = l === 'es' ? 'Hola Jefe' : 'Hello Boss';
     var helpText = l === 'es' ? '¿En qué te puedo ayudar hoy?' : 'How can I help you today?';
     bbl.innerHTML = greeting + '! 👊 Soy <strong>Jarvis 2.0</strong> 🤖<br><br>' + helpText;
@@ -7527,7 +7529,7 @@ var _origSetLang = typeof setLang === 'function' ? setLang : null;
   <!-- Header -->
   <div class="tc-panel-hdr">
     <span style="font-size:14px">💬</span>
-    <div class="tc-panel-title">Team Chat</div>
+    <div class="tc-panel-title" id="tc-panel-title">Team Chat</div>
     <button onclick="tcToggleBroadcast()" id="tc-broadcast-btn" title="Mensaje a todos" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📢 Todos</button>
   </div>
 
@@ -7608,6 +7610,17 @@ function tcStatusClass(s) {
   return s==='online'?'online':s==='busy'?'busy':'offline';
 }
 
+// ── Favorites (pinned agents) — stored in localStorage ──
+var _tcFavorites = JSON.parse(localStorage.getItem('tc_favorites')||'[]');
+function tcToggleFav(uid, ev) {
+  if(ev) ev.stopPropagation();
+  var idx = _tcFavorites.indexOf(uid);
+  if(idx > -1) _tcFavorites.splice(idx, 1);
+  else _tcFavorites.push(uid);
+  localStorage.setItem('tc_favorites', JSON.stringify(_tcFavorites));
+  tcRenderAgentsList();
+}
+
 // ── Time format ──
 function tcTimeStr(ts) {
   if(!ts) return '';
@@ -7618,6 +7631,8 @@ function tcTimeStr(ts) {
 
 // ── Initialize Team Chat when tab opens ──
 var _tcInitDone = false;
+// Set bilingual title on load
+(function(){ var t=document.getElementById('tc-panel-title'); if(t && typeof lang!=='undefined') t.textContent=lang==='es'?'Chat Equipo':'Team Chat'; })();
 
 // Start Auto Engine when app loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -7760,20 +7775,37 @@ function tcRenderAgentsList() {
     list.innerHTML = '<div class="tc-sec-lbl">Equipo</div><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Sin agentes</div>';
     return;
   }
-  var html = '<div class="tc-sec-lbl">Equipo ('+agents.length+')</div>';
-  agents.forEach(function(ag) {
-    var color = tcColor(ag.uid);
+  // Separate favorites from rest
+  var favs  = agents.filter(function(a){ return _tcFavorites.indexOf(a.uid)>-1; });
+  var rest  = agents.filter(function(a){ return _tcFavorites.indexOf(a.uid)===-1; });
+  var isES  = (typeof lang !== 'undefined') ? lang === 'es' : true;
+
+  function renderAgent(ag) {
+    var color    = tcColor(ag.uid);
     var initials = tcInitials(ag.name);
-    var unread = _tcUnreadCounts[ag.uid]||0;
+    var unread   = _tcUnreadCounts[ag.uid]||0;
     var isActive = _tcCurrentChat === ag.uid ? ' active' : '';
-    html += '<div class="tc-panel-agent'+isActive+'" onclick="tcOpenChat(\'' + ag.uid + '\',this)">';
-    html += '<div class="tc-av" style="background:linear-gradient(135deg,'+color+','+color+'aa)">'+initials;
-    html += '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span></div>';
-    html += '<div class="tc-ag-info"><div class="tc-ag-name">'+escHtml(ag.name)+'</div>';
-    html += '<div class="tc-ag-st">'+tcStatusLabel(ag.status)+'</div></div>';
-    if(unread>0) html += '<div class="tc-unread">'+unread+'</div>';
-    html += '</div>';
-  });
+    var isFav    = _tcFavorites.indexOf(ag.uid) > -1;
+    var h = '<div class="tc-panel-agent'+isActive+'" onclick="tcOpenChat(''+ag.uid+'',this)">';
+    h += '<div class="tc-av" style="background:linear-gradient(135deg,'+color+','+color+'aa)">'+initials;
+    h += '<span class="tc-dot '+tcStatusClass(ag.status)+'"></span></div>';
+    h += '<div class="tc-ag-info"><div class="tc-ag-name">'+escHtml(ag.name)+'</div>';
+    h += '<div class="tc-ag-st">'+tcStatusLabel(ag.status)+'</div></div>';
+    if(unread>0) h += '<div class="tc-unread">'+unread+'</div>';
+    h += '<button onclick="tcToggleFav(''+ag.uid+'',event)" title="'+(isFav?(isES?'Quitar de favoritos':'Unpin'):(isES?'Fijar arriba':'Pin'))+'" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;opacity:'+(isFav?'1':'.3')+';transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=''+(isFav?'1':'.3')+''">📌</button>';
+    h += '</div>';
+    return h;
+  }
+
+  var html = '';
+  if(favs.length > 0) {
+    html += '<div class="tc-sec-lbl">'+(isES?'Frecuentes':'Pinned')+'</div>';
+    favs.forEach(function(ag){ html += renderAgent(ag); });
+    html += '<div class="tc-sec-lbl">'+(isES?'Equipo ('+rest.length+')':'Team ('+rest.length+')')+'</div>';
+  } else {
+    html += '<div class="tc-sec-lbl">'+(isES?'Equipo ('+agents.length+')':'Team ('+agents.length+')')+'</div>';
+  }
+  rest.forEach(function(ag){ html += renderAgent(ag); });
   list.innerHTML = html;
 }
 // ── Open chat with agent ──
