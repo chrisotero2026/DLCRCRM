@@ -947,11 +947,10 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 <div class="tabs">
   <div class="tab active" id="tab-clients" onclick="switchTab('clients')">👥 <span id="lbl-clients">Clientes</span></div>
   <div class="tab" id="tab-pipeline" onclick="switchTab('pipeline')">📊 Pipeline</div>
-  <div class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📈 <span id="lbl-dashboard">Dashboard</span></div>
 
   <div class="tab" id="tab-team" onclick="switchTab('team')">👥 <span id="lbl-team">Equipo</span></div>
   <div class="tab" id="tab-income" onclick="switchTab('income')">📈 <span id="lbl-income">Ingresos</span></div>
-  <div class="tab" id="tab-table" onclick="switchTab('table')">📋 <span id="lbl-table">Tabla</span></div>
+
   <div class="tab" id="tab-mort" onclick="switchTab('mort')">🧮 <span id="lbl-mort">Calculadora de Préstamo</span></div>
   <div class="tab" id="tab-calendar" onclick="switchTab('calendar')">📅 <span id="lbl-calendar">Calendario</span></div>
   <div class="tab" id="tab-myincome" onclick="switchTab('myincome')">💵 <span id="lbl-myincome">Mis Ingresos</span></div>
@@ -1077,6 +1076,47 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 
     <!-- ═══ VIEW: PIPELINE ═══ -->
     <div class="view" id="view-pipeline">
+      <!-- View toggle: Kanban / Table -->
+      <div id="pipeViewToggle" style="display:flex;align-items:center;gap:8px;padding:10px 20px 0;flex-shrink:0">
+        <button id="pipeToggleKanban" onclick="setPipeView('kanban')" style="padding:6px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">📊 Kanban</button>
+        <button id="pipeToggleTable" onclick="setPipeView('table')" style="padding:6px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">📋 Tabla</button>
+      </div>
+      <div id="pipe-table-wrap" style="display:none;flex:1;overflow:auto">
+      <div class="table-view">
+        <div class="tbl-topbar">
+          <div class="tbl-search"><span>🔍</span><input type="text" id="tblSearch" placeholder="Buscar en tabla..." oninput="renderTable()"></div>
+          <button class="tbl-flt" id="tbl-flt-hot" onclick="tblTempToggle('hot')">🔥 <span id="lbl-tbl-hot">Caliente</span></button>
+          <button class="tbl-flt" id="tbl-flt-cold" onclick="tblTempToggle('cold')">❄️ <span id="lbl-tbl-cold">Frío</span></button>
+          <select class="tbl-flt" id="tblTypeF" onchange="renderTable()">
+            <option value="">🏷️ <span id="lbl-all-types">Todos</span></option>
+            <option value="buy">🏡 Compra</option><option value="sell">💰 Venta</option>
+            <option value="buysell">🔁 Venta/Compra</option><option value="refi">🔄 Refinance</option><option value="loan">🏦 Préstamo</option>
+          </select>
+          <select class="tbl-flt" id="tblStageF" onchange="renderTable()">
+            <option value="">📊 Etapa</option>
+            <option value="lead">Lead</option><option value="contacted">Contactado</option>
+            <option value="qualified">Calificado</option><option value="negotiation">Negociación</option><option value="closed">Cerrado</option>
+          </select>
+          <button class="tbl-flt" onclick="toggleColPanel()">⚙️ <span id="lbl-cols">Columnas</span></button>
+          <button class="tbl-exp" onclick="exportTable()">📥 <span id="lbl-tbl-exp">Exportar</span></button>
+        </div>
+        <div class="col-toggle-panel" id="colPanel"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead id="tblHead"></thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+          <div class="tbl-footer">
+            <span id="tblFooterInfo">0 clientes</span>
+            <span id="tblFooterTotal" style="color:var(--gold);font-weight:700"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══ VIEW: JARVIS AI ═══ -->
+      </div>
       <div class="pipe-view" id="pipeView"></div>
     </div>
 
@@ -1501,41 +1541,7 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
   </div>
 </div>
 
-    <div class="view" id="view-table">
-      <div class="table-view">
-        <div class="tbl-topbar">
-          <div class="tbl-search"><span>🔍</span><input type="text" id="tblSearch" placeholder="Buscar en tabla..." oninput="renderTable()"></div>
-          <button class="tbl-flt" id="tbl-flt-hot" onclick="tblTempToggle('hot')">🔥 <span id="lbl-tbl-hot">Caliente</span></button>
-          <button class="tbl-flt" id="tbl-flt-cold" onclick="tblTempToggle('cold')">❄️ <span id="lbl-tbl-cold">Frío</span></button>
-          <select class="tbl-flt" id="tblTypeF" onchange="renderTable()">
-            <option value="">🏷️ <span id="lbl-all-types">Todos</span></option>
-            <option value="buy">🏡 Compra</option><option value="sell">💰 Venta</option>
-            <option value="buysell">🔁 Venta/Compra</option><option value="refi">🔄 Refinance</option><option value="loan">🏦 Préstamo</option>
-          </select>
-          <select class="tbl-flt" id="tblStageF" onchange="renderTable()">
-            <option value="">📊 Etapa</option>
-            <option value="lead">Lead</option><option value="contacted">Contactado</option>
-            <option value="qualified">Calificado</option><option value="negotiation">Negociación</option><option value="closed">Cerrado</option>
-          </select>
-          <button class="tbl-flt" onclick="toggleColPanel()">⚙️ <span id="lbl-cols">Columnas</span></button>
-          <button class="tbl-exp" onclick="exportTable()">📥 <span id="lbl-tbl-exp">Exportar</span></button>
-        </div>
-        <div class="col-toggle-panel" id="colPanel"></div>
-        <div class="tbl-wrap">
-          <table>
-            <thead id="tblHead"></thead>
-            <tbody id="tblBody"></tbody>
-          </table>
-          <div class="tbl-footer">
-            <span id="tblFooterInfo">0 clientes</span>
-            <span id="tblFooterTotal" style="color:var(--gold);font-weight:700"></span>
-          </div>
-        </div>
-      </div>
-    </div>
 
-
-    <!-- ═══ VIEW: JARVIS AI ═══ -->
     <div class="view" id="view-calendar">
       <div class="cal-header">
         <div class="cal-nav">
@@ -2289,6 +2295,26 @@ function setLang(l){
 // ════════════════════════════════════════
 //  TABS
 // ════════════════════════════════════════
+function setPipeView(v) {
+  var kanban = document.getElementById('pipe-kanban-wrap');
+  var table  = document.getElementById('pipe-table-wrap');
+  var btnK   = document.getElementById('pipeToggleKanban');
+  var btnT   = document.getElementById('pipeToggleTable');
+  if (!kanban || !table) return;
+  if (v === 'kanban') {
+    kanban.style.display = '';
+    table.style.display  = 'none';
+    if (btnK) { btnK.style.background='linear-gradient(135deg,var(--gold),#d4920a)'; btnK.style.color='#000'; btnK.style.border='none'; }
+    if (btnT) { btnT.style.background='transparent'; btnT.style.color='var(--muted)'; btnT.style.border='1px solid var(--border)'; }
+  } else {
+    kanban.style.display = 'none';
+    table.style.display  = '';
+    if (btnT) { btnT.style.background='linear-gradient(135deg,var(--gold),#d4920a)'; btnT.style.color='#000'; btnT.style.border='none'; }
+    if (btnK) { btnK.style.background='transparent'; btnK.style.color='var(--muted)'; btnK.style.border='1px solid var(--border)'; }
+    renderTable();
+  }
+}
+
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
