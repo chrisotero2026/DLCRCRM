@@ -1,0 +1,15 @@
+{
+  "name": "jarvis-dlcr",
+  "version": "1.0.0",
+  "description": "DLCR CRM with Jarvis AI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
