@@ -6360,17 +6360,40 @@ function calDayClick(ds) {
 function calShowEvent(id) {
   var ev = _calEvents.find(function(e){ return e.id === id; });
   if (!ev) return;
-  var h = '<div>';
-  h += '<div style="font-size:16px;font-weight:800;margin-bottom:12px">' + ev.title + '</div>';
-  h += '<div style="font-size:13px;color:var(--muted);margin-bottom:6px">📅 ' + ev.date + (ev.time ? ' · ⏰ ' + ev.time : '') + '</div>';
-  if (ev.agent) h += '<div style="font-size:13px;margin-bottom:6px">👤 ' + ev.agent + '</div>';
-  if (ev.phone) h += '<div style="font-size:13px;margin-bottom:6px">📞 ' + ev.phone + '</div>';
-  if (ev.notes) h += '<div style="font-size:13px;margin-bottom:12px">📝 ' + ev.notes + '</div>';
-  if (ev.phone) h += '<button onclick="window.open(\'tel:' + ev.phone + '\');closeGenModal()" style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">📞 Llamar</button>';
-  if (ev.type === 'manual') h += '<button onclick="calDeleteEvent(\'' + id + '\');closeGenModal()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px">🗑️ Eliminar</button>';
-  h += '<button onclick="closeGenModal()" style="background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Cerrar</button>';
-  h += '</div>';
-  openGenModal(h);
+  var d = document.createElement('div');
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:16px;font-weight:800;margin-bottom:12px';
+  title.textContent = ev.title;
+  d.appendChild(title);
+  var dateEl = document.createElement('div');
+  dateEl.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:6px';
+  dateEl.textContent = '📅 ' + ev.date + (ev.time ? ' · ⏰ ' + ev.time : '');
+  d.appendChild(dateEl);
+  if (ev.agent) { var ag = document.createElement('div'); ag.style.cssText='font-size:13px;margin-bottom:6px'; ag.textContent='👤 '+ev.agent; d.appendChild(ag); }
+  if (ev.phone) { var ph = document.createElement('div'); ph.style.cssText='font-size:13px;margin-bottom:6px'; ph.textContent='📞 '+ev.phone; d.appendChild(ph); }
+  if (ev.notes) { var nt = document.createElement('div'); nt.style.cssText='font-size:13px;margin-bottom:12px'; nt.textContent='📝 '+ev.notes; d.appendChild(nt); }
+  var btnRow = document.createElement('div');
+  if (ev.phone) {
+    var callBtn = document.createElement('button');
+    callBtn.textContent = '📞 Llamar';
+    callBtn.style.cssText = 'background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px';
+    callBtn.addEventListener('click', function(){ window.open('tel:'+ev.phone); closeGenModal(); });
+    btnRow.appendChild(callBtn);
+  }
+  if (ev.type === 'manual') {
+    var delBtn = document.createElement('button');
+    delBtn.textContent = '🗑️ Eliminar';
+    delBtn.style.cssText = 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-right:8px';
+    delBtn.addEventListener('click', function(){ calDeleteEvent(id); closeGenModal(); });
+    btnRow.appendChild(delBtn);
+  }
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Cerrar';
+  closeBtn.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit';
+  closeBtn.addEventListener('click', closeGenModal);
+  btnRow.appendChild(closeBtn);
+  d.appendChild(btnRow);
+  openGenModal(d.innerHTML);
 }
 
 function calAddEvent() {
