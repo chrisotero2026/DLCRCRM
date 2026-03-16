@@ -1429,7 +1429,7 @@ header.logo-lg .logo-icon { width:72px !important; height:72px !important; font-
 
         <!-- RIGHT: Status & Memory -->
         <div class="jv-right">
-          <div class="jv-sect">ESTADO</div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><div class="jv-sect" style="margin:0">ESTADO</div><button onclick="autoShowSettings()" title="Auto Engine" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:4px">🤖 Auto</button></div>
           <div class="jv-status-row">
             <div class="jv-dot" id="jvDotClaude"></div>
             <span>Claude AI</span>
@@ -3201,6 +3201,11 @@ function saveClient(){
   }
   saveAll(); closeModal(); renderAll(); showToast(tr('saved'));
   if(editId) openDetail(editId);
+  // Auto Engine: trigger welcome for new clients
+  else if(typeof autoEngineStart === 'function') {
+    autoEngineStart();
+    setTimeout(autoEngineRun, 1000);
+  }
 }
 
 // ════════════════════════════════════════
@@ -6889,6 +6894,11 @@ function jvDoAddClient(p) {
     if (typeof renderAll === 'function') renderAll();
     // Update CRM snapshot
     jvCrmSnap();
+    // Auto Engine trigger
+    if(typeof autoEngineStart === 'function') {
+      autoEngineStart();
+      setTimeout(autoEngineRun, 500);
+    }
     jvAddMsg('bot',
       '✅ <strong>' + p.name + '</strong> agregado al CRM.<br>' +
       '<span style="color:var(--muted);font-size:12px">' +
@@ -7350,6 +7360,19 @@ function tcTimeStr(ts) {
 
 // ── Initialize Team Chat when tab opens ──
 var _tcInitDone = false;
+
+// Start Auto Engine when app loads
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var checkAuto = setInterval(function() {
+      if(typeof _fbUser !== 'undefined' && _fbUser &&
+         typeof clients !== 'undefined') {
+        clearInterval(checkAuto);
+        if(typeof autoEngineStart === 'function') autoEngineStart();
+      }
+    }, 1500);
+  }, 3000);
+});
 function tcInit() {
   if(!_fbUser || !_fbDb) { setTimeout(tcInit, 800); return; }
   if(_tcInitDone) return;
@@ -7847,6 +7870,418 @@ async function tcSendBroadcast() {
 
 
 <script>
+
+// ══════════════════════════════════════════════════════════════
+//  JARVIS AUTO ENGINE — Seguimiento automático de leads
+// ══════════════════════════════════════════════════════════════
+
+var _autoEngineInterval = null;
+var _autoEngineStarted  = false;
+
+// ── Plantillas de mensajes ──
+var AUTO_TEMPLATES = {
+  welcome_es: [
+    'Hola {nombre}, soy {agente} de DLCR Real Estate & Loans. Gracias por su interés, estamos listos para ayudarle a encontrar su hogar ideal. ¿Cuándo podría hablar con usted?',
+    'Hola {nombre}! Le contacto de DLCR Real Estate. Vi su interés en propiedades y me encantaría ayudarle. ¿Tiene unos minutos para conversar?',
+    'Buenos días {nombre}, soy {agente} de DLCR. Quería presentarme y saber cómo puedo ayudarle con su búsqueda de propiedad.',
+  ],
+  welcome_en: [
+    'Hi {nombre}, this is {agente} from DLCR Real Estate & Loans. Thank you for your interest! When would be a good time to connect?',
+    'Hello {nombre}! I'm {agente} from DLCR. I'd love to help you find your perfect home. Do you have a few minutes to chat?',
+  ],
+  followup_es: [
+    'Hola {nombre}, soy {agente} de DLCR. Le escribo para saber si tiene alguna pregunta sobre propiedades. Estoy disponible cuando usted quiera.',
+    '{nombre}, buen día. Solo quería hacer seguimiento y ver si puedo ayudarle con algo relacionado a su búsqueda de propiedad.',
+    'Hola {nombre}, {agente} de DLCR nuevamente. ¿Ha tenido oportunidad de pensar en las opciones? Con gusto le ayudo.',
+  ],
+  followup_en: [
+    'Hi {nombre}, {agente} from DLCR following up. Just wanted to check if you have any questions about properties.',
+    'Hello {nombre}, just touching base to see how I can help with your property search. Feel free to reach out anytime!',
+  ],
+};
+
+function autoGetTemplate(type, nombre, agente) {
+  var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+  var key = type + '_' + (isES ? 'es' : 'en');
+  var templates = AUTO_TEMPLATES[key] || AUTO_TEMPLATES[type+'_es'] || [];
+  if(!templates.length) return '';
+  var t = templates[Math.floor(Math.random() * templates.length)];
+  return t.replace(/{nombre}/g, nombre||'').replace(/{agente}/g, agente||'DLCR');
+}
+
+// ── Score automático hot/warm/cold ──
+function autoScoreClient(c) {
+  var now     = Date.now();
+  var created = c.created || now;
+  var ageHours = (now - created) / 3600000;
+  var today   = new Date().toISOString().split('T')[0];
+
+  // Ya cerrado — no tocar
+  if(c.stage === 'closed') return null;
+
+  // Tiene actividad reciente (llamada programada futura)
+  if(c.nextCall && c.nextCall >= today) {
+    return c.temp !== 'hot' ? 'hot' : null;
+  }
+
+  // Llamada vencida
+  if(c.nextCall && c.nextCall < today) {
+    return c.temp !== 'warm' ? 'warm' : null;
+  }
+
+  // Sin actividad por más de 7 días
+  if(ageHours > 168) {
+    return c.temp !== 'cold' ? 'cold' : null;
+  }
+
+  // Lead nuevo (menos de 24h) — caliente por defecto
+  if(ageHours < 24 && c.stage === 'lead') {
+    return c.temp !== 'hot' ? 'hot' : null;
+  }
+
+  return null;
+}
+
+// ── Mostrar notificación interna de auto engine ──
+function autoNotify(icon, title, body, clientId, type) {
+  // Toast visual
+  if(typeof showToast === 'function') {
+    showToast(icon + ' ' + title + (body ? ': ' + body : ''));
+  }
+
+  // Push notification si disponible
+  if(typeof jarvispush === 'function') {
+    jarvispush(icon + ' ' + title, body, clientId ? '/?tab=clients' : '/');
+  }
+
+  // Guardar en Firebase como actividad del cliente
+  if(clientId && typeof _fbDb !== 'undefined' && _fbDb) {
+    var fb = window._firebase;
+    try {
+      var agentName = (_userProfile&&_userProfile.name) || (_fbUser&&_fbUser.email) || 'Jarvis';
+      fb.setDoc(fb.doc(_fbDb, 'auto_logs', _fbUserId+'_'+clientId+'_'+type), {
+        clientId:  clientId,
+        agentUid:  _fbUserId,
+        type:      type,
+        title:     title,
+        body:      body,
+        ts:        Date.now(),
+        done:      false
+      }, {merge:true});
+    } catch(e){}
+  }
+
+  // Agregar al historial del cliente en el CRM
+  if(clientId && typeof clients !== 'undefined') {
+    var c = clients.find(function(x){ return x.id === clientId; });
+    if(c) {
+      if(!c.autoHistory) c.autoHistory = [];
+      c.autoHistory.push({ type: type, title: title, body: body, ts: Date.now() });
+      if(typeof saveAll === 'function') saveAll();
+    }
+  }
+}
+
+// ── Registrar que se mandó mensaje para no repetir ──
+function autoMarkSent(clientId, type) {
+  if(typeof clients === 'undefined') return;
+  var c = clients.find(function(x){ return x.id === clientId; });
+  if(!c) return;
+  if(!c.autoSent) c.autoSent = {};
+  c.autoSent[type] = Date.now();
+  if(typeof saveAll === 'function') saveAll();
+}
+
+function autoAlreadySent(c, type, cooldownHours) {
+  if(!c.autoSent || !c.autoSent[type]) return false;
+  var elapsed = (Date.now() - c.autoSent[type]) / 3600000;
+  return elapsed < (cooldownHours || 24);
+}
+
+// ── Mostrar panel de acción de seguimiento ──
+function autoShowAction(c, type, message) {
+  var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+  var agentName = (_userProfile&&_userProfile.name) || (_fbUser&&_fbUser.displayName) || 'Agente';
+
+  // Crear toast interactivo
+  var existing = document.getElementById('auto-action-toast');
+  if(existing) existing.remove();
+
+  var toast = document.createElement('div');
+  toast.id = 'auto-action-toast';
+  toast.style.cssText = [
+    'position:fixed',
+    'bottom:24px',
+    'right:290px',
+    'background:var(--card)',
+    'border:1px solid var(--gold)',
+    'border-radius:14px',
+    'padding:14px 16px',
+    'z-index:8000',
+    'box-shadow:0 8px 30px rgba(0,0,0,.5)',
+    'font-family:DM Sans,sans-serif',
+    'max-width:320px',
+    'animation:slideInRight .3s ease'
+  ].join(';');
+
+  var typeLabels = {
+    welcome:  isES ? '👋 Bienvenida a nuevo lead' : '👋 Welcome new lead',
+    followup: isES ? '📲 Follow-up automático'    : '📲 Automatic follow-up',
+    reminder: isES ? '⏰ Recordatorio de llamada' : '⏰ Call reminder',
+    score:    isES ? '🎯 Status actualizado'       : '🎯 Status updated',
+  };
+
+  toast.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<div style="font-size:13px;font-weight:700;color:var(--gold)">' + (typeLabels[type]||'🤖 Auto') + '</div>' +
+      '<span onclick="document.getElementById('auto-action-toast').remove()" style="cursor:pointer;color:var(--muted);font-size:16px">✕</span>' +
+    '</div>' +
+    '<div style="font-size:13px;font-weight:600;margin-bottom:4px">👤 ' + escHtml(c.name) + '</div>' +
+    (message ? '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">' + escHtml(message) + '</div>' : '') +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">' +
+      (c.phone ? '<button onclick="autoActionSMS(''+c.id+'',''+encodeURIComponent(message)+'')" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#22c55e;border-radius:8px;padding:7px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📱 SMS</button>' : '') +
+      (c.email ? '<button onclick="autoActionEmail(''+c.id+'',''+encodeURIComponent(message)+'')" style="background:rgba(74,133,245,.15);border:1px solid rgba(74,133,245,.3);color:#4a85f5;border-radius:8px;padding:7px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✉️ Email</button>' : '') +
+      '<button onclick="autoActionCall(''+c.id+'')" style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);color:var(--gold);border-radius:8px;padding:7px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📞 Llamar</button>' +
+      '<button onclick="autoMarkSent('+c.id+',''+type+'');document.getElementById('auto-action-toast').remove()" style="grid-column:1/-1;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit">✓ Marcar como hecho</button>' +
+    '</div>';
+
+  document.body.appendChild(toast);
+
+  // Auto-hide after 20 seconds
+  setTimeout(function() {
+    var t = document.getElementById('auto-action-toast');
+    if(t) t.remove();
+  }, 20000);
+}
+
+// ── Acciones del toast ──
+function autoActionSMS(clientId, msgEncoded) {
+  var c = clients.find(function(x){ return x.id == clientId; });
+  if(!c || !c.phone) return;
+  var msg = decodeURIComponent(msgEncoded);
+  var url = 'sms:' + c.phone.replace(/\D/g,'') + '?body=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  autoMarkSent(clientId, 'sms_sent');
+  autoNotify('📱', 'SMS enviado', c.name, clientId, 'sms');
+  var toast = document.getElementById('auto-action-toast');
+  if(toast) toast.remove();
+}
+
+function autoActionEmail(clientId, msgEncoded) {
+  var c = clients.find(function(x){ return x.id == clientId; });
+  if(!c || !c.email) return;
+  var msg = decodeURIComponent(msgEncoded);
+  var agentName = (_userProfile&&_userProfile.name)||'DLCR';
+  var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+  var subject = isES ? 'DLCR Real Estate — ' + agentName : 'DLCR Real Estate — ' + agentName;
+  window.open('mailto:' + c.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(msg), '_blank');
+  autoMarkSent(clientId, 'email_sent');
+  autoNotify('✉️', 'Email abierto', c.name, clientId, 'email');
+  var toast = document.getElementById('auto-action-toast');
+  if(toast) toast.remove();
+}
+
+function autoActionCall(clientId) {
+  var c = clients.find(function(x){ return x.id == clientId; });
+  if(!c || !c.phone) return;
+  window.open('tel:' + c.phone.replace(/\D/g,''), '_blank');
+  autoMarkSent(clientId, 'call_made');
+  var toast = document.getElementById('auto-action-toast');
+  if(toast) toast.remove();
+}
+
+// ══ MOTOR PRINCIPAL — corre cada 5 minutos ══
+function autoEngineRun() {
+  if(typeof clients === 'undefined' || !clients.length) return;
+  if(!_fbUser) return;
+
+  var now     = Date.now();
+  var today   = new Date().toISOString().split('T')[0];
+  var agentName = (_userProfile&&_userProfile.name) || (_fbUser&&_fbUser.displayName) || 'DLCR';
+  var isES    = (typeof lang !== 'undefined') ? lang === 'es' : true;
+  var myClients = clients.filter(function(c){
+    return c.stage !== 'closed' &&
+           (!c.ownedBy || c.ownedBy === _fbUserId);
+  });
+
+  var actionsTriggered = 0;
+
+  myClients.forEach(function(c) {
+    var ageHours = c.created ? (now - c.created) / 3600000 : 999;
+
+    // ────────────────────────────────
+    // 1. BIENVENIDA — nuevo lead (<2h)
+    // ────────────────────────────────
+    if(ageHours < 2 && c.stage === 'lead' && !autoAlreadySent(c, 'welcome', 48)) {
+      var msg = autoGetTemplate('welcome', c.name.split(' ')[0], agentName);
+      autoMarkSent(c.id, 'welcome');
+      autoNotify('👋', isES ? 'Nuevo lead — envía bienvenida' : 'New lead — send welcome', c.name, c.id, 'welcome');
+      setTimeout(function(client, message){
+        return function(){ autoShowAction(client, 'welcome', message); };
+      }(c, msg), actionsTriggered * 3000);
+      actionsTriggered++;
+    }
+
+    // ────────────────────────────────────────
+    // 2. RECORDATORIO AGENTE — 24h sin contacto
+    // ────────────────────────────────────────
+    if(ageHours >= 20 && ageHours < 28 &&
+       !c.nextCall &&
+       c.stage === 'lead' &&
+       !autoAlreadySent(c, 'reminder_24h', 48)) {
+      autoMarkSent(c.id, 'reminder_24h');
+      autoNotify(
+        '⏰',
+        isES ? '24h sin contacto — ' + c.name : '24h no contact — ' + c.name,
+        isES ? '¿Ya le llamaste?' : 'Did you call them yet?',
+        c.id, 'reminder_24h'
+      );
+      setTimeout(function(client){
+        return function(){
+          var msg = autoGetTemplate('followup', client.name.split(' ')[0], agentName);
+          autoShowAction(client, 'reminder', msg);
+        };
+      }(c), actionsTriggered * 3000);
+      actionsTriggered++;
+    }
+
+    // ────────────────────────────────────────────
+    // 3. FOLLOW-UP CLIENTE — 72h sin respuesta
+    // ────────────────────────────────────────────
+    if(ageHours >= 68 && ageHours < 76 &&
+       c.stage === 'lead' &&
+       !autoAlreadySent(c, 'followup_72h', 72)) {
+      var msgFu = autoGetTemplate('followup', c.name.split(' ')[0], agentName);
+      autoMarkSent(c.id, 'followup_72h');
+      autoNotify(
+        '📲',
+        isES ? '3 días sin respuesta — ' + c.name : '3 days no reply — ' + c.name,
+        isES ? 'Hora de un follow-up' : 'Time for a follow-up',
+        c.id, 'followup_72h'
+      );
+      setTimeout(function(client, message){
+        return function(){ autoShowAction(client, 'followup', message); };
+      }(c, msgFu), actionsTriggered * 3000);
+      actionsTriggered++;
+    }
+
+    // ────────────────────────────────────────
+    // 4. ALERTA LLAMADA VENCIDA
+    // ────────────────────────────────────────
+    if(c.nextCall && c.nextCall < today && !autoAlreadySent(c, 'overdue_alert', 12)) {
+      autoMarkSent(c.id, 'overdue_alert');
+      var daysOver = Math.round((now - new Date(c.nextCall+'T00:00:00').getTime()) / 86400000);
+      autoNotify(
+        '🚨',
+        isES ? 'Llamada vencida ' + daysOver + 'd — ' + c.name : 'Overdue call ' + daysOver + 'd — ' + c.name,
+        isES ? 'Reagenda o contacta ahora' : 'Reschedule or contact now',
+        c.id, 'overdue_alert'
+      );
+      setTimeout(function(client, days){
+        return function(){
+          var msg = autoGetTemplate('followup', client.name.split(' ')[0], agentName);
+          autoShowAction(client, 'reminder', msg);
+        };
+      }(c, daysOver), actionsTriggered * 3000);
+      actionsTriggered++;
+    }
+
+    // ────────────────────────────────────────
+    // 5. SCORING AUTOMÁTICO hot/warm/cold
+    // ────────────────────────────────────────
+    var newScore = autoScoreClient(c);
+    if(newScore && newScore !== c.temp) {
+      var oldTemp = c.temp;
+      c.temp = newScore;
+      if(typeof saveAll === 'function') saveAll();
+      if(typeof renderAll === 'function') renderAll();
+      var scoreEmoji = newScore==='hot'?'🔥':newScore==='warm'?'🌡️':'❄️';
+      autoNotify(
+        scoreEmoji,
+        isES ? c.name + ' → ' + newScore.toUpperCase() : c.name + ' → ' + newScore.toUpperCase(),
+        isES ? 'Cambio automático de ' + oldTemp + ' a ' + newScore : 'Auto-changed from ' + oldTemp + ' to ' + newScore,
+        c.id, 'score_change'
+      );
+    }
+  });
+}
+
+// ── Iniciar el motor ──
+function autoEngineStart() {
+  if(_autoEngineStarted) return;
+  _autoEngineStarted = true;
+
+  // Agregar CSS para animación
+  var style = document.createElement('style');
+  style.textContent = '@keyframes slideInRight{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}';
+  document.head.appendChild(style);
+
+  // Primera corrida a los 10 segundos (esperar que cargue el CRM)
+  setTimeout(autoEngineRun, 10000);
+
+  // Luego cada 5 minutos
+  _autoEngineInterval = setInterval(autoEngineRun, 5 * 60 * 1000);
+
+  console.log('[Jarvis Auto Engine] ✅ Iniciado');
+}
+
+// ── Panel de configuración del Auto Engine ──
+function autoShowSettings() {
+  var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+  var html =
+    '<div>' +
+    '<div style="font-size:16px;font-weight:800;margin-bottom:4px">🤖 Auto Engine</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">' + (isES ? 'Seguimiento automático de leads' : 'Automatic lead follow-up') + '</div>' +
+
+    '<div style="display:flex;flex-direction:column;gap:10px">' +
+
+    autoSettingRow('auto_welcome',   '👋', isES ? 'Bienvenida a nuevos leads'     : 'Welcome new leads',       isES ? 'Alerta cuando entra lead nuevo (<2h)'       : 'Alert when new lead added (<2h)') +
+    autoSettingRow('auto_24h',       '⏰', isES ? 'Recordatorio 24h sin contacto' : '24h no contact reminder', isES ? 'Avisa si no contactaste en 24 horas'         : 'Alert if no contact in 24 hours') +
+    autoSettingRow('auto_followup',  '📲', isES ? 'Follow-up a los 3 días'        : '3-day follow-up',         isES ? 'Sugiere mensaje al cliente sin respuesta'    : 'Suggest message if no reply') +
+    autoSettingRow('auto_overdue',   '🚨', isES ? 'Alerta llamada vencida'        : 'Overdue call alert',      isES ? 'Notifica cuando vence una llamada programada': 'Notify when scheduled call is overdue') +
+    autoSettingRow('auto_scoring',   '🎯', isES ? 'Scoring automático'            : 'Auto scoring',            isES ? 'Cambia hot/warm/cold según actividad'        : 'Auto-change hot/warm/cold by activity') +
+
+    '</div>' +
+
+    '<div style="margin-top:16px;padding:10px;background:rgba(240,165,0,.08);border-radius:8px;border:1px solid rgba(240,165,0,.2)">' +
+    '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:4px">📝 ' + (isES ? 'Plantillas personalizadas' : 'Custom templates') + '</div>' +
+    '<textarea id="auto-template-input" placeholder="' + (isES ? 'Hola {nombre}, soy {agente} de DLCR...' : 'Hi {nombre}, this is {agente} from DLCR...') + '" style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:12px;font-family:inherit;outline:none;resize:vertical;min-height:60px;box-sizing:border-box;margin-top:4px"></textarea>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:3px">' + (isES ? 'Usa {nombre} y {agente} como variables' : 'Use {nombre} and {agente} as variables') + '</div>' +
+    '</div>' +
+
+    '<button onclick="autoSaveSettings()" style="width:100%;margin-top:12px;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--gold),#d4920a);color:#000;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">💾 ' + (isES ? 'Guardar configuración' : 'Save settings') + '</button>' +
+    '</div>';
+
+  if(typeof showGenModal === 'function') showGenModal(html);
+}
+
+function autoSettingRow(key, icon, title, desc) {
+  var saved = localStorage.getItem(key);
+  var checked = saved === null ? true : saved === 'true';
+  return '<label style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:10px 12px;cursor:pointer">' +
+    '<input type="checkbox" id="' + key + '" ' + (checked?'checked':'') + ' style="width:16px;height:16px;accent-color:var(--gold)">' +
+    '<div style="flex:1">' +
+      '<div style="font-size:13px;font-weight:600">' + icon + ' ' + title + '</div>' +
+      '<div style="font-size:11px;color:var(--muted)">' + desc + '</div>' +
+    '</div>' +
+    '</label>';
+}
+
+function autoSaveSettings() {
+  ['auto_welcome','auto_24h','auto_followup','auto_overdue','auto_scoring'].forEach(function(key) {
+    var el = document.getElementById(key);
+    if(el) localStorage.setItem(key, el.checked);
+  });
+  var tpl = document.getElementById('auto-template-input');
+  if(tpl && tpl.value.trim()) {
+    var isES = (typeof lang !== 'undefined') ? lang === 'es' : true;
+    AUTO_TEMPLATES[(isES?'followup_es':'followup_en')].unshift(tpl.value.trim());
+  }
+  if(typeof closeGenModal === 'function') closeGenModal();
+  if(typeof showToast === 'function') showToast('✅ Auto Engine configurado');
+}
+
+
 // ══════════════════════════════════════════════════════
 //  PWA — Service Worker + Install Prompt
 // ══════════════════════════════════════════════════════
