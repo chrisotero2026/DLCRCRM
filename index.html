@@ -2,8 +2,21 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DLCR — Real Estate & Loans CRM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Jarvis — DLCR CRM</title>
+
+<!-- ═══ PWA META TAGS ═══ -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#f0a500">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="apple-touch-startup-image" href="/icon-512.png">
+<meta name="msapplication-TileImage" content="/icon-192.png">
+<meta name="msapplication-TileColor" content="#0a0f1e">
+<meta name="description" content="DLCR Real Estate & Loans CRM — Jarvis AI Assistant">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="preload" as="style" onload="this.rel='stylesheet'">
 <style>
 :root {
@@ -7832,5 +7845,199 @@ async function tcSendBroadcast() {
 })();
 </script>
 
+
+<script>
+// ══════════════════════════════════════════════════════
+//  PWA — Service Worker + Install Prompt
+// ══════════════════════════════════════════════════════
+
+// ── Register Service Worker ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(function(reg) {
+        console.log('[Jarvis PWA] SW registrado:', reg.scope);
+        // Check for updates every 30 min
+        setInterval(function() { reg.update(); }, 30 * 60 * 1000);
+      })
+      .catch(function(err) {
+        console.warn('[Jarvis PWA] SW error:', err);
+      });
+
+    // Listen for SW messages (notification clicks)
+    navigator.serviceWorker.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+        var tab = new URL(event.data.url, window.location.origin).searchParams.get('tab');
+        if (tab && typeof switchTab === 'function') switchTab(tab);
+      }
+    });
+  });
+}
+
+// ── PWA Install Banner ──
+var _pwaPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _pwaPrompt = e;
+  // Show install button after 3 seconds if not installed
+  setTimeout(showPwaBtn, 3000);
+});
+
+function showPwaBtn() {
+  if (!_pwaPrompt) return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  var existing = document.getElementById('pwa-install-btn');
+  if (existing) return;
+
+  var btn = document.createElement('div');
+  btn.id = 'pwa-install-btn';
+  btn.innerHTML = '📱 Instalar Jarvis como App';
+  btn.style.cssText = [
+    'position:fixed',
+    'bottom:20px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'background:linear-gradient(135deg,#f0a500,#d4920a)',
+    'color:#000',
+    'font-weight:800',
+    'font-size:13px',
+    'padding:12px 24px',
+    'border-radius:30px',
+    'cursor:pointer',
+    'z-index:9999',
+    'box-shadow:0 4px 20px rgba(240,165,0,.5)',
+    'font-family:DM Sans,sans-serif',
+    'white-space:nowrap',
+    'animation:pwaPulse 2s infinite'
+  ].join(';');
+
+  // Add animation
+  var style = document.createElement('style');
+  style.textContent = '@keyframes pwaPulse{0%,100%{box-shadow:0 4px 20px rgba(240,165,0,.5)}50%{box-shadow:0 4px 30px rgba(240,165,0,.8)}}';
+  document.head.appendChild(style);
+
+  btn.addEventListener('click', function() {
+    _pwaPrompt.prompt();
+    _pwaPrompt.userChoice.then(function(result) {
+      if (result.outcome === 'accepted') {
+        console.log('[Jarvis PWA] Instalado!');
+        showToast('✅ ¡Jarvis instalado en tu dispositivo!');
+      }
+      _pwaPrompt = null;
+      btn.remove();
+    });
+  });
+
+  // Close button
+  var closeBtn = document.createElement('span');
+  closeBtn.textContent = ' ✕';
+  closeBtn.style.cssText = 'margin-left:8px;opacity:.7;font-weight:400';
+  closeBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    btn.remove();
+    _pwaPrompt = null;
+  });
+  btn.appendChild(closeBtn);
+
+  document.body.appendChild(btn);
+
+  // Auto-hide after 15 seconds
+  setTimeout(function() { if(btn.parentNode) btn.remove(); }, 15000);
+}
+
+// ── Push Notification Permission ──
+function requestPushPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') return;
+  if (Notification.permission === 'denied') return;
+
+  // Ask after user has been in app for 30 seconds
+  setTimeout(function() {
+    Notification.requestPermission().then(function(permission) {
+      if (permission === 'granted') {
+        showToast('🔔 Notificaciones activadas');
+        console.log('[Jarvis PWA] Push notifications granted');
+      }
+    });
+  }, 30000);
+}
+
+// ── Local push notification (sin servidor) ──
+function jarvispush(title, body, url) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (document.hasFocus()) return; // No mostrar si el usuario está viendo la app
+
+  var n = new Notification(title || 'Jarvis CRM', {
+    body:  body  || '',
+    icon:  '/icon-192.png',
+    badge: '/icon-192.png',
+    tag:   'jarvis-local',
+    data:  url || '/'
+  });
+  n.onclick = function() {
+    window.focus();
+    n.close();
+    if(url && url.includes('tab=') && typeof switchTab === 'function') {
+      var tab = new URLSearchParams(url.split('?')[1]||'').get('tab');
+      if(tab) switchTab(tab);
+    }
+  };
+  setTimeout(function() { n.close(); }, 6000);
+}
+
+// ── Notify on key events ──
+// Hook into existing CRM events to fire notifications
+document.addEventListener('jarvis:client-added', function(e) {
+  jarvispush('👤 Cliente agregado', e.detail && e.detail.name ? e.detail.name : 'Nuevo cliente', '/?tab=clients');
+});
+document.addEventListener('jarvis:call-scheduled', function(e) {
+  jarvispush('📅 Llamada agendada', e.detail && e.detail.name ? 'Con: ' + e.detail.name : 'Nueva cita', '/?tab=calendar');
+});
+document.addEventListener('jarvis:message-received', function(e) {
+  jarvispush('💬 Mensaje de ' + (e.detail && e.detail.from ? e.detail.from : 'equipo'), e.detail && e.detail.text ? e.detail.text : '', '/');
+});
+
+// Start push permission request flow
+requestPushPermission();
+
+// ── iOS install instructions (Safari no soporta beforeinstallprompt) ──
+function showiOSInstall() {
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  if (!isIOS || isStandalone) return;
+
+  var shown = localStorage.getItem('jarvis-ios-install-shown');
+  if (shown) return;
+  localStorage.setItem('jarvis-ios-install-shown', '1');
+
+  setTimeout(function() {
+    var toast = document.createElement('div');
+    toast.style.cssText = [
+      'position:fixed',
+      'bottom:20px',
+      'left:50%',
+      'transform:translateX(-50%)',
+      'background:#1c2640',
+      'border:1px solid rgba(240,165,0,.4)',
+      'color:#e2e8f0',
+      'font-size:13px',
+      'padding:14px 18px',
+      'border-radius:14px',
+      'z-index:9999',
+      'box-shadow:0 8px 30px rgba(0,0,0,.6)',
+      'font-family:DM Sans,sans-serif',
+      'max-width:300px',
+      'text-align:center',
+      'line-height:1.5'
+    ].join(';');
+    toast.innerHTML = '📱 <strong>Instalar Jarvis en iPhone</strong><br><br>Toca <strong>Compartir</strong> ↑ y luego<br><strong>"Agregar a pantalla de inicio"</strong><br><br><span style="font-size:11px;color:#64748b;cursor:pointer" onclick="this.parentNode.remove()">Cerrar</span>';
+    document.body.appendChild(toast);
+    setTimeout(function() { if(toast.parentNode) toast.remove(); }, 12000);
+  }, 5000);
+}
+showiOSInstall();
+
+</script>
 </body>
 </html>
