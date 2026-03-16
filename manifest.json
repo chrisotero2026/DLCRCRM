@@ -1,0 +1,50 @@
+{
+  "name": "Jarvis — DLCR CRM",
+  "short_name": "Jarvis",
+  "description": "DLCR Real Estate & Loans CRM — Tu asistente inteligente",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0f1e",
+  "theme_color": "#f0a500",
+  "lang": "es",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "description": "Ver lista de clientes",
+      "url": "/?tab=clients",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Pipeline",
+      "short_name": "Pipeline",
+      "description": "Ver pipeline de ventas",
+      "url": "/?tab=pipeline",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Jarvis AI",
+      "short_name": "Jarvis AI",
+      "description": "Hablar con Jarvis",
+      "url": "/?tab=jarvis",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
