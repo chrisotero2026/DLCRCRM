@@ -61,6 +61,13 @@ Be professional, concise, and proactive.${memory ? `\n\nMemory: ${memory}` : ''}
   }
 });
 
+// Alias — same handler
+app.post('/api/jarvis/claude', async (req, res) => {
+  // Redirect to main jarvis endpoint handler
+  req.url = '/api/jarvis';
+  return app._router.handle(req, res, () => {});
+});
+
 // ═══════════════════════════════════════════════════════════
 //  2. TEXT-TO-SPEECH  — ElevenLabs
 //  POST /api/speak  { text: "Hello", voice_id: "..." }
